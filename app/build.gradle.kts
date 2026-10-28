@@ -12,8 +12,8 @@ android {
         applicationId = "com.jarvis.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 9
-        versionName = "9.0"
+        versionCode = 10
+        versionName = "10.0"
         val apiKey = System.getenv("PROXY_API_KEY") ?: ""
         buildConfigField("String", "DEFAULT_API_KEY", "\"$apiKey\"")
     }
