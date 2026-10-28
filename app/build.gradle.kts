@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -11,17 +12,13 @@ android {
         applicationId = "com.jarvis.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 7
-        versionName = "7.0"
-        
-        // Берем ключ из GitHub Secrets (или ставим пустоту, если его нет)
+        versionCode = 9
+        versionName = "9.0"
         val apiKey = System.getenv("PROXY_API_KEY") ?: ""
         buildConfigField("String", "DEFAULT_API_KEY", "\"$apiKey\"")
     }
 
-    buildFeatures {
-        buildConfig = true
-    }
+    buildFeatures { buildConfig = true }
 
     signingConfigs {
         create("release") {
@@ -43,7 +40,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-
     kotlinOptions { jvmTarget = "17" }
 }
 
@@ -54,4 +50,9 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("com.alphacephei:vosk-android:0.3.47@aar")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    
+    // Firebase Auth
+    implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.android.gms:play-services-auth:20.7.0")
 }
