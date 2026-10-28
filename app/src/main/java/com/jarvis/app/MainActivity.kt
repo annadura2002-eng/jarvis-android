@@ -6,19 +6,21 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.provider.ContactsContract
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import android.telephony.PhoneStateListener
 import android.telephony.TelephonyManager
-import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageButton
+import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.google.android.material.appbar.MaterialToolbar
 import org.json.JSONObject
 import java.net.URL
 import java.util.Locale
@@ -27,35 +29,23 @@ import java.util.concurrent.Executors
 class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private lateinit var logView: TextView
+    private lateinit var scrollView: ScrollView
     private lateinit var inputField: EditText
     private var tts: TextToSpeech? = null
     private val executor = Executors.newSingleThreadExecutor()
     private var callStartTime: Long = 0
     private var isCalling: Boolean = false
+    private var assistantName = "Jarvis" // Дефолтное имя
 
     private val appsMap = mapOf(
         "телеграм" to "org.telegram.messenger",
-        "telegram" to "org.telegram.messenger",
         "ютуб" to "com.google.android.youtube",
-        "youtube" to "com.google.android.youtube",
         "вк" to "com.vkontakte.android",
-        "vk" to "com.vkontakte.android",
         "тикток" to "com.zhiliaoapp.musically",
-        "tiktok" to "com.zhiliaoapp.musically",
         "вотсап" to "com.whatsapp",
-        "whatsapp" to "com.whatsapp",
         "хром" to "com.android.chrome",
-        "chrome" to "com.android.chrome",
-        "плей" to "com.android.vending",
-        "play" to "com.android.vending",
         "камера" to "com.transsion.camera",
-        "camera" to "com.transsion.camera",
-        "настройки" to "com.android.settings",
-        "settings" to "com.android.settings",
-        "контакты" to "com.android.contacts",
-        "contacts" to "com.android.contacts",
-        "часы" to "com.transsion.deskclock",
-        "радио" to "com.transsion.fmradio"
+        "настройки" to "com.android.settings"
     )
 
     private val requestPerms = registerForActivityResult(
@@ -75,14 +65,19 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
         logView = findViewById(R.id.logView)
+        scrollView = findViewById(R.id.scrollView)
         inputField = findViewById(R.id.inputField)
-        val sendButton = findViewById<Button>(R.id.sendButton)
-        val voiceButton = findViewById<Button>(R.id.voiceButton)
+        val sendButton = findViewById<ImageButton>(R.id.sendButton)
+        val voiceButton = findViewById<ImageButton>(R.id.voiceButton)
+        val btnClear = findViewById<ImageButton>(R.id.btnClear)
+        val btnMenu = findViewById<ImageButton>(R.id.btnMenu)
 
         tts = TextToSpeech(this, this)
         requestAllPermissions()
-        setupCallListener()
+
+        try { setupCallListener() } catch (e: Exception) { log("Ошибка слушателя звонков") }
 
         sendButton.setOnClickListener {
             val t = inputField.text.toString().trim()
@@ -93,50 +88,65 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
         voiceButton.setOnClickListener { startVoiceRecognition() }
-        log("Джарвис запущен")
+
+        // Очистка чата
+        btnClear.setOnClickListener {
+            logView.text = ""
+            log("Чат очищен. Имя '$assistantName' сохранено.")
+        }
+
+        // Меню команд
+        btnMenu.setOnClickListener { showCommandsMenu() }
+
+        log("$assistantName запущен. Готов к работе.")
+    }
+
+    private fun showCommandsMenu() {
+        val commands = arrayOf(
+            "открой телеграм", "позвони Даша", "погода москва",
+            "батарея", "время", "открой ютуб"
+        )
+        AlertDialog.Builder(this, com.google.android.material.R.style.Theme_Material3_Dark_Dialog_Alert)
+            .setTitle("Доступные команды")
+            .setItems(commands) { _, which ->
+                inputField.setText(commands[which])
+            }
+            .setPositiveButton("Закрыть", null)
+            .show()
     }
 
     private fun setupCallListener() {
         val tm = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-        tm.listen(object : PhoneStateListener() {
-            override fun onCallStateChanged(state: Int, phoneNumber: String?) {
-                when (state) {
-                    TelephonyManager.CALL_STATE_OFFHOOK -> {
-                        if (!isCalling) {
-                            isCalling = true
-                            callStartTime = System.currentTimeMillis()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+            tm.listen(object : PhoneStateListener() {
+                override fun onCallStateChanged(state: Int, phoneNumber: String?) {
+                    when (state) {
+                        TelephonyManager.CALL_STATE_OFFHOOK -> {
+                            if (!isCalling) { isCalling = true; callStartTime = System.currentTimeMillis() }
                         }
-                    }
-                    TelephonyManager.CALL_STATE_IDLE -> {
-                        if (isCalling) {
-                            isCalling = false
-                            val duration = System.currentTimeMillis() - callStartTime
-                            if (duration < 3000) {
-                                log("Звонок отменен или отклонен")
-                                tts?.speak("Звонок отменен", TextToSpeech.QUEUE_FLUSH, null, "j")
+                        TelephonyManager.CALL_STATE_IDLE -> {
+                            if (isCalling) {
+                                isCalling = false
+                                if (System.currentTimeMillis() - callStartTime < 3000) {
+                                    log("Звонок отменен")
+                                    tts?.speak("Звонок отменен", TextToSpeech.QUEUE_FLUSH, null, "j")
+                                }
                             }
                         }
                     }
                 }
-            }
-        }, PhoneStateListener.LISTEN_CALL_STATE)
+            }, PhoneStateListener.LISTEN_CALL_STATE)
+        }
     }
 
     private fun requestAllPermissions() {
         val perms = mutableListOf(
-            Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.CALL_PHONE,
-            Manifest.permission.READ_CONTACTS,
-            Manifest.permission.SEND_SMS,
-            Manifest.permission.READ_PHONE_STATE,
-            Manifest.permission.POST_NOTIFICATIONS
+            Manifest.permission.RECORD_AUDIO, Manifest.permission.CALL_PHONE,
+            Manifest.permission.READ_CONTACTS, Manifest.permission.SEND_SMS,
+            Manifest.permission.READ_PHONE_STATE, Manifest.permission.POST_NOTIFICATIONS
         )
-        val notGranted = perms.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }
-        if (notGranted.isNotEmpty()) {
-            requestPerms.launch(notGranted.toTypedArray())
-        }
+        val notGranted = perms.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+        if (notGranted.isNotEmpty()) requestPerms.launch(notGranted.toTypedArray())
     }
 
     private fun startVoiceRecognition() {
@@ -144,11 +154,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
         }
-        try {
-            speechLauncher.launch(intent)
-        } catch (e: Exception) {
-            log("STT: ${e.message}")
-        }
+        try { speechLauncher.launch(intent) } catch (e: Exception) { log("STT не работает") }
     }
 
     private fun handleCommand(raw: String) {
@@ -157,18 +163,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         if (cmd.startsWith("позвони ") || cmd.startsWith("набери ")) {
             val target = cmd.substringAfter(" ").trim()
-            if (target.replace(" ", "").replace("+","").all { it.isDigit() }) {
-                callNumber(target)
-            } else {
+            if (target.replace(" ", "").replace("+","").all { it.isDigit() }) callNumber(target)
+            else {
                 val num = findContactNumber(target)
                 if (num != null) callNumber(num) else reply("Контакт $target не найден")
             }
             return
         }
 
-        if (cmd.startsWith("открой ") || cmd.startsWith("запусти ")) {
+        if (cmd.startsWith("открой ")) {
             val app = cmd.substringAfter(" ").trim()
-            if (openApp(app)) reply("Открываю $app") else reply("Приложение $app не найдено")
+            if (openApp(app)) reply("Открываю $app") else reply("Приложение не найдено")
             return
         }
 
@@ -181,10 +186,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return
         }
 
-        if (cmd.contains("батаре") || cmd.contains("заряд")) {
+        if (cmd.contains("батаре")) {
             val bm = getSystemService(BATTERY_SERVICE) as android.os.BatteryManager
-            val level = bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
-            reply("Заряд $level процентов")
+            reply("Заряд ${bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)}%")
             return
         }
 
@@ -192,17 +196,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             reply("Сейчас ${java.text.SimpleDateFormat("HH:mm", Locale.getDefault()).format(java.util.Date())}")
             return
         }
-
         reply("Не понял: $cmd")
     }
 
     private fun callNumber(number: String) {
-        try {
-            startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:$number")))
-            reply("Звоню $number")
-        } catch (e: SecurityException) {
-            reply("Нет разрешения")
-        }
+        try { startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:$number"))); reply("Звоню $number") } 
+        catch (e: SecurityException) { reply("Нет разрешения") }
     }
 
     private fun findContactNumber(name: String): String? {
@@ -213,8 +212,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             while (it.moveToNext()) {
                 val dn = it.getString(it.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)) ?: continue
                 if (dn.lowercase().contains(name.lowercase())) {
-                    found = it.getString(it.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER))
-                    break
+                    found = it.getString(it.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER)); break
                 }
             }
         }
@@ -222,28 +220,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun openApp(name: String): Boolean {
-        // 1) Ищем в нашем жестком списке
         val pkgName = appsMap[name]
         if (pkgName != null) {
             val intent = packageManager.getLaunchIntentForPackage(pkgName)
-            if (intent != null) {
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                startActivity(intent)
-                return true
-            }
+            if (intent != null) { intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(intent); return true }
         }
-
-        // 2) Если нет в списке — ищем по названию
         val pm = packageManager
-        val apps = pm.getInstalledApplications(0)
-        val target = apps.firstOrNull {
-            pm.getApplicationLabel(it).toString().lowercase().contains(name.lowercase())
+        val target = pm.getInstalledApplications(0).firstOrNull { 
+            pm.getApplicationLabel(it).toString().lowercase().contains(name.lowercase()) 
         } ?: return false
-        
         val intent = pm.getLaunchIntentForPackage(target.packageName) ?: return false
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        startActivity(intent)
-        return true
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(intent); return true
     }
 
     private fun getWeather(city: String): String? {
@@ -253,30 +240,21 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             val results = geoJson.optJSONArray("results") ?: return null
             if (results.length() == 0) return null
             val r = results.getJSONObject(0)
-            val lat = r.getDouble("latitude")
-            val lon = r.getDouble("longitude")
+            val lat = r.getDouble("latitude"); val lon = r.getDouble("longitude")
             val name = r.optString("name", city)
             val wUrl = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code"
             val wJson = JSONObject(URL(wUrl).readText())
             val cur = wJson.getJSONObject("current")
-            val temp = cur.getDouble("temperature_2m")
-            val feels = cur.getDouble("apparent_temperature")
-            val hum = cur.getInt("relative_humidity_2m")
-            val code = cur.getInt("weather_code")
-            val desc = weatherDesc(code)
-            "В городе $name сейчас ${"%.0f".format(temp)} градусов, $desc. Ощущается как ${"%.0f".format(feels)}. Влажность $hum процентов."
+            "В городе $name сейчас ${"%.0f".format(cur.getDouble("temperature_2m"))} градусов."
         } catch (e: Exception) { null }
     }
 
-    private fun weatherDesc(code: Int): String = when (code) {
-        0 -> "ясно"; 1, 2 -> "переменная облачность"; 3 -> "пасмурно"
-        45, 48 -> "туман"; 51, 53, 55 -> "морось"
-        61, 63, 65 -> "дождь"; 71, 73, 75 -> "снег"
-        80, 81, 82 -> "ливень"; 95, 96, 99 -> "гроза"
-        else -> "код $code"
+    private fun log(text: String) {
+        runOnUiThread {
+            logView.append("\n$text")
+            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+        }
     }
-
-    private fun log(text: String) { runOnUiThread { logView.append("\n$text") } }
 
     private fun reply(text: String) {
         log(text)
