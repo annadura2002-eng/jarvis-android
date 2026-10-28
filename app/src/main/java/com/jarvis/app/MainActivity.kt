@@ -103,7 +103,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val voiceButton = findViewById<ImageButton>(R.id.voiceButton)
         val btnClear = findViewById<ImageButton>(R.id.btnClear)
         val btnMenu = findViewById<ImageButton>(R.id.btnMenu)
-        val btnSettings = findViewById<ImageButton>(R.id.btnSettings)
+        
 
         val prefs = getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE)
         assistantName = prefs.getString("assistant_name", "Jarvis") ?: "Jarvis"
@@ -139,7 +139,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         voiceButton.setOnClickListener { startVoiceRecognition() }
         btnClear.setOnClickListener { logContainer.removeAllViews() }
         btnMenu.setOnClickListener { showCommandsMenu() }
-        btnSettings.setOnClickListener { showSettingsDialog() }
+        
     }
 
     private fun showSettingsDialog() {
