@@ -1,13 +1,18 @@
 package com.jarvis.app
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.ContactsContract
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
+import android.telephony.PhoneStateListener
+import android.telephony.TelephonyManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
@@ -25,6 +30,33 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var inputField: EditText
     private var tts: TextToSpeech? = null
     private val executor = Executors.newSingleThreadExecutor()
+    private var callStartTime: Long = 0
+    private var isCalling: Boolean = false
+
+    private val appsMap = mapOf(
+        "телеграм" to "org.telegram.messenger",
+        "telegram" to "org.telegram.messenger",
+        "ютуб" to "com.google.android.youtube",
+        "youtube" to "com.google.android.youtube",
+        "вк" to "com.vkontakte.android",
+        "vk" to "com.vkontakte.android",
+        "тикток" to "com.zhiliaoapp.musically",
+        "tiktok" to "com.zhiliaoapp.musically",
+        "вотсап" to "com.whatsapp",
+        "whatsapp" to "com.whatsapp",
+        "хром" to "com.android.chrome",
+        "chrome" to "com.android.chrome",
+        "плей" to "com.android.vending",
+        "play" to "com.android.vending",
+        "камера" to "com.transsion.camera",
+        "camera" to "com.transsion.camera",
+        "настройки" to "com.android.settings",
+        "settings" to "com.android.settings",
+        "контакты" to "com.android.contacts",
+        "contacts" to "com.android.contacts",
+        "часы" to "com.transsion.deskclock",
+        "радио" to "com.transsion.fmradio"
+    )
 
     private val requestPerms = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -50,6 +82,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         tts = TextToSpeech(this, this)
         requestAllPermissions()
+        setupCallListener()
 
         sendButton.setOnClickListener {
             val t = inputField.text.toString().trim()
@@ -63,12 +96,39 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         log("Джарвис запущен")
     }
 
+    private fun setupCallListener() {
+        val tm = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+        tm.listen(object : PhoneStateListener() {
+            override fun onCallStateChanged(state: Int, phoneNumber: String?) {
+                when (state) {
+                    TelephonyManager.CALL_STATE_OFFHOOK -> {
+                        if (!isCalling) {
+                            isCalling = true
+                            callStartTime = System.currentTimeMillis()
+                        }
+                    }
+                    TelephonyManager.CALL_STATE_IDLE -> {
+                        if (isCalling) {
+                            isCalling = false
+                            val duration = System.currentTimeMillis() - callStartTime
+                            if (duration < 3000) {
+                                log("Звонок отменен или отклонен")
+                                tts?.speak("Звонок отменен", TextToSpeech.QUEUE_FLUSH, null, "j")
+                            }
+                        }
+                    }
+                }
+            }
+        }, PhoneStateListener.LISTEN_CALL_STATE)
+    }
+
     private fun requestAllPermissions() {
         val perms = mutableListOf(
             Manifest.permission.RECORD_AUDIO,
             Manifest.permission.CALL_PHONE,
             Manifest.permission.READ_CONTACTS,
             Manifest.permission.SEND_SMS,
+            Manifest.permission.READ_PHONE_STATE,
             Manifest.permission.POST_NOTIFICATIONS
         )
         val notGranted = perms.filter {
@@ -106,8 +166,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return
         }
 
-        if (cmd.startsWith("открой ")) {
-            val app = cmd.substringAfter("открой ").trim()
+        if (cmd.startsWith("открой ") || cmd.startsWith("запусти ")) {
+            val app = cmd.substringAfter(" ").trim()
             if (openApp(app)) reply("Открываю $app") else reply("Приложение $app не найдено")
             return
         }
@@ -162,11 +222,24 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun openApp(name: String): Boolean {
+        // 1) Ищем в нашем жестком списке
+        val pkgName = appsMap[name]
+        if (pkgName != null) {
+            val intent = packageManager.getLaunchIntentForPackage(pkgName)
+            if (intent != null) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(intent)
+                return true
+            }
+        }
+
+        // 2) Если нет в списке — ищем по названию
         val pm = packageManager
         val apps = pm.getInstalledApplications(0)
         val target = apps.firstOrNull {
             pm.getApplicationLabel(it).toString().lowercase().contains(name.lowercase())
         } ?: return false
+        
         val intent = pm.getLaunchIntentForPackage(target.packageName) ?: return false
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         startActivity(intent)
