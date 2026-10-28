@@ -122,7 +122,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
         
         if (telegramToken.isNotEmpty()) {
-            startService(Intent(this, TelegramService::class.java))
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
