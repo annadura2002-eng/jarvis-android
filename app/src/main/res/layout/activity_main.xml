@@ -4,15 +4,15 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0F0F13">
+    android:background="#0B0B0E">
 
-    <!-- Красивая шапка -->
+    <!-- Кастомная шапка -->
     <LinearLayout
         android:id="@+id/header"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#1A1A22"
-        android:elevation="8dp"
+        android:background="#121218"
+        android:elevation="4dp"
         android:padding="16dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
@@ -25,7 +25,7 @@
             android:layout_weight="1"
             android:text="Jarvis"
             android:textColor="#FFFFFF"
-            android:textSize="20sp"
+            android:textSize="22sp"
             android:textStyle="bold"
             android:fontFamily="sans-serif-medium"/>
 
@@ -35,7 +35,7 @@
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_menu_sort_by_size"
-            app:tint="#7B7BFF"/>
+            app:tint="#8B8BFF"/>
 
         <ImageButton
             android:id="@+id/btnClear"
@@ -52,7 +52,7 @@
         android:id="@+id/scrollView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:padding="12dp"
+        android:padding="16dp"
         android:clipToPadding="false"
         app:layout_constraintTop_toBottomOf="@id/header"
         app:layout_constraintBottom_toTopOf="@id/bottomBar">
@@ -61,20 +61,20 @@
             android:id="@+id/logView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="#D1D1D6"
+            android:textColor="#E2E2E8"
             android:textSize="15sp"
-            android:lineSpacingExtra="8dp"
+            android:lineSpacingExtra="10dp"
             android:fontFamily="sans-serif"/>
     </ScrollView>
 
-    <!-- Панель ввода -->
+    <!-- Панель ввода (Таблетка) -->
     <LinearLayout
         android:id="@+id/bottomBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:padding="12dp"
-        android:background="#1A1A22"
+        android:background="#121218"
         android:elevation="12dp"
         android:gravity="center_vertical"
         app:layout_constraintBottom_toBottomOf="parent">
@@ -84,12 +84,12 @@
             android:layout_width="0dp"
             android:layout_height="48dp"
             android:layout_weight="1"
-            android:hint="Сообщение..."
+            android:hint="Введите команду..."
             android:textColor="#FFFFFF"
-            android:textColorHint="#5A5A6A"
-            android:background="#242432"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
+            android:textColorHint="#6B6B7A"
+            android:background="@drawable/bg_input"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
             android:inputType="text"
             android:maxLines="1"/>
 
@@ -98,16 +98,16 @@
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:layout_marginStart="8dp"
-            android:background="#242432"
+            android:background="@drawable/bg_button_mic"
             android:src="@android:drawable/ic_btn_speak_now"
-            app:tint="#7B7BFF"/>
+            app:tint="#8B8BFF"/>
 
         <ImageButton
             android:id="@+id/sendButton"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:layout_marginStart="8dp"
-            android:background="#7B7BFF"
+            android:background="@drawable/bg_button_send"
             android:src="@android:drawable/ic_menu_send"
             app:tint="#FFFFFF"/>
     </LinearLayout>

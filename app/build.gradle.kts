@@ -11,8 +11,8 @@ android {
         applicationId = "com.jarvis.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "2.0"
+        versionCode = 4
+        versionName = "4.0"
     }
 
     signingConfigs {
@@ -37,7 +37,6 @@ android {
     }
 
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { viewBinding = true }
 }
 
 dependencies {
@@ -46,8 +45,6 @@ dependencies {
     implementation("com.google.android.material:material:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     
-    // Firebase (Авторизация)
-    implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
-    implementation("com.google.firebase:firebase-auth-ktx")
-    implementation("com.google.android.gms:play-services-auth:20.7.0")
+    // Vosk Offline Wake Word
+    implementation("com.alphacephei:vosk-android:0.3.47@aar")
 }

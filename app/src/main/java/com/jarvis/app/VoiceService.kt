@@ -4,82 +4,116 @@ import android.app.*
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import android.speech.RecognizerIntent
-import android.content.Context
-import android.os.Bundle
-import android.speech.RecognitionListener
 import android.speech.SpeechRecognizer
+import android.speech.RecognitionListener
+import android.os.Bundle
+import android.content.Context
+import org.vosk.Model
+import org.vosk.Recognizer
+import org.vosk.android.StorageService
+import org.vosk.android.RecognitionListener as VoskListener
+import org.vosk.android.SpeechService
+import java.io.IOException
 
-class VoiceService : Service() {
+class VoiceService : Service(), VoskListener {
+    private var model: Model? = null
+    private var speechService: SpeechService? = null
     private var speechRecognizer: SpeechRecognizer? = null
-    private var wakeWord = "jarvis"
+    private var wakeWord = "коля"
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         val notification = NotificationCompat.Builder(this, "JarvisChannel")
-            .setContentTitle("Джарвис активен")
-            .setContentText("Слушаю фоновый режим...")
+            .setContentTitle("Jarvis активен")
+            .setContentText("Скажите кодовое слово...")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
         
         startForeground(1, notification)
-        initSpeechRecognizer()
+
+        val prefs = getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE)
+        wakeWord = prefs.getString("assistant_name", "коля")?.lowercase() ?: "коля"
+
+        initVosk()
     }
 
-    private fun initSpeechRecognizer() {
-        if (SpeechRecognizer.isRecognitionAvailable(this)) {
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            }
+    private fun initVosk() {
+        StorageService.unpack(this, "model-ru", "model",
+            { model ->
+                this.model = model
+                startListening()
+            },
+            { exception -> exception.printStackTrace() }
+        )
+    }
 
+    private fun startListening() {
+        try {
+            val rec = Recognizer(model, 16000.0f)
+            speechService = SpeechService(rec, 16000.0f)
+            speechService?.startListening(this)
+        } catch (e: IOException) { e.printStackTrace() }
+    }
+
+    override fun onResult(hypothesis: String) {
+        // hypothesis - это JSON от Vosk. Ищем там слово.
+        if (hypothesis.contains(wakeWord)) {
+            speechService?.stop()
+            listenForCommand()
+        }
+    }
+
+    private fun listenForCommand() {
+        if (speechRecognizer == null) {
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
             speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+                override fun onResults(results: Bundle?) {
+                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    val text = matches?.firstOrNull() ?: ""
+                    if (text.isNotEmpty()) {
+                        val intent = Intent("WAKE_WORD_DETECTED")
+                        intent.putExtra("command", text)
+                        sendBroadcast(intent)
+                    }
+                    restartVosk()
+                }
+                override fun onError(error: Int) { restartVosk() }
                 override fun onReadyForSpeech(params: Bundle?) {}
                 override fun onBeginningOfSpeech() {}
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 override fun onEndOfSpeech() {}
-                override fun onError(error: Int) { restartListening() }
-                override fun onResults(results: Bundle?) {
-                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    val text = matches?.firstOrNull()?.lowercase() ?: ""
-                    if (text.contains(wakeWord)) {
-                        // Отправляем сигнал в MainActivity, если оно открыто
-                        val intent = Intent("WAKE_WORD_DETECTED")
-                        intent.putExtra("command", text.replace(wakeWord, "").trim())
-                        sendBroadcast(intent)
-                    }
-                    restartListening()
-                }
-                override fun onPartialResults(partialResults: Bundle?) {
-                    val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    val text = matches?.firstOrNull()?.lowercase() ?: ""
-                    if (text.contains(wakeWord)) {
-                        val intent = Intent("WAKE_WORD_DETECTED")
-                        intent.putExtra("command", text.replace(wakeWord, "").trim())
-                        sendBroadcast(intent)
-                    }
-                }
+                override fun onPartialResults(partialResults: Bundle?) {}
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
-
-            speechRecognizer?.startListening(intent)
         }
-    }
 
-    private fun restartListening() {
-        speechRecognizer?.cancel()
-        speechRecognizer?.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-        })
+        }
+        speechRecognizer?.startListening(intent)
     }
+
+    private fun restartVosk() {
+        speechRecognizer?.cancel()
+        try {
+            val rec = Recognizer(model, 16000.0f)
+            speechService = SpeechService(rec, 16000.0f)
+            speechService?.startListening(this)
+        } catch (e: IOException) { e.printStackTrace() }
+    }
+
+    override fun onFinalResult(hypothesis: String?) {}
+    override fun onPartialResult(hypothesis: String?) {}
+    override fun onError(exception: Exception?) { restartVosk() }
+    override fun onTimeout() { restartVosk() }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -89,4 +123,11 @@ class VoiceService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+    
+    override fun onDestroy() {
+        speechService?.stop()
+        speechService?.shutdown()
+        speechRecognizer?.destroy()
+        super.onDestroy()
+    }
 }
