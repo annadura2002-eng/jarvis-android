@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:background="#0B0B0E"
+    android:gravity="center_horizontal">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Настройка Jarvis"
+        android:textColor="#FFFFFF"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:layout_marginTop="40dp"
+        android:layout_marginBottom="8dp"/>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Для корректной работы мне нужны некоторые доступы."
+        android:textColor="#888888"
+        android:textSize="14sp"
+        android:layout_marginBottom="32dp"
+        android:gravity="center"/>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Микрофон -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:padding="12dp"
+                android:background="@drawable/bg_input"
+                android:layout_marginBottom="12dp">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Микрофон (Голосовое управление)"
+                    android:textColor="#FFFFFF"/>
+                <Button
+                    android:id="@+id/btnMic"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:text="Выдать"
+                    android:backgroundTint="#5B5BFF"/>
+            </LinearLayout>
+
+            <!-- Контакты -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:padding="12dp"
+                android:background="@drawable/bg_input"
+                android:layout_marginBottom="12dp">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Контакты (Для звонков)"
+                    android:textColor="#FFFFFF"/>
+                <Button
+                    android:id="@+id/btnContacts"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:text="Выдать"
+                    android:backgroundTint="#5B5BFF"/>
+            </LinearLayout>
+
+            <!-- Звонки и СМС -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:padding="12dp"
+                android:background="@drawable/bg_input"
+                android:layout_marginBottom="12dp">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Звонки и СМС"
+                    android:textColor="#FFFFFF"/>
+                <Button
+                    android:id="@+id/btnPhoneSms"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:text="Выдать"
+                    android:backgroundTint="#5B5BFF"/>
+            </LinearLayout>
+
+            <!-- Уведомления -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:padding="12dp"
+                android:background="@drawable/bg_input"
+                android:layout_marginBottom="12dp">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Чтение уведомлений"
+                    android:textColor="#FFFFFF"/>
+                <Button
+                    android:id="@+id/btnNotifs"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:text="Выдать"
+                    android:backgroundTint="#5B5BFF"/>
+            </LinearLayout>
+
+            <!-- Accessibility -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:padding="12dp"
+                android:background="@drawable/bg_input"
+                android:layout_marginBottom="12dp">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Спец. возможности (Управление ВПН/свайпы)"
+                    android:textColor="#FFFFFF"/>
+                <Button
+                    android:id="@+id/btnAccess"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:text="Выдать"
+                    android:backgroundTint="#5B5BFF"/>
+            </LinearLayout>
+
+        </LinearLayout>
+    </ScrollView>
+
+    <Button
+        android:id="@+id/btnContinue"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:text="Продолжить"
+        android:layout_marginTop="16dp"
+        android:backgroundTint="#2A2A35"
+        android:enabled="false"/>
+</LinearLayout>

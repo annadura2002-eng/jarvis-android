@@ -79,7 +79,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         "телеграм" to "org.telegram.messenger", "ютуб" to "com.google.android.youtube",
         "вк" to "com.vkontakte.android", "тикток" to "com.zhiliaoapp.musically",
         "вотсап" to "com.whatsapp", "хром" to "com.android.chrome",
-        "камера" to "com.transsion.camera", "настройки" to "com.android.settings"
+        "камера" to "com.transsion.camera", "настройки" to "com.android.settings",
+        "happ" to "com.happvpn.app", "впн" to "com.happvpn.app" // Пример пакета VPN
     )
 
     private val requestPerms = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
@@ -108,7 +109,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         assistantName = prefs.getString("assistant_name", "Jarvis") ?: "Jarvis"
         telegramToken = prefs.getString("telegram_token", "") ?: ""
         
-        // Если в настройках пусто, берем вшитый ключ из GitHub
         apiKey = prefs.getString("api_key", "") ?: ""
         if (apiKey.isEmpty()) apiKey = BuildConfig.DEFAULT_API_KEY
 
@@ -148,14 +148,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             orientation = LinearLayout.VERTICAL
             setPadding(40, 20, 40, 20)
         }
-        
-        val inputApi = EditText(this).apply {
-            setText(apiKey); hint = "API Ключ ProxyAPI"
-        }
-        val inputTg = EditText(this).apply {
-            setText(telegramToken); hint = "Токен Telegram Бота"
-        }
-        
+        val inputApi = EditText(this).apply { setText(apiKey); hint = "API Ключ ProxyAPI" }
+        val inputTg = EditText(this).apply { setText(telegramToken); hint = "Токен Telegram Бота" }
         layout.addView(inputApi)
         layout.addView(inputTg)
 
@@ -169,7 +163,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     putString("api_key", apiKey)
                     putString("telegram_token", telegramToken)
                 }.apply()
-                reply("Настройки сохранены. Перезапустите приложение, если добавили токен Telegram.")
+                reply("Настройки сохранены.")
             }
             .setNegativeButton("Отмена", null)
             .show()
@@ -219,7 +213,34 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             reply("Сейчас ${SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())}"); return
         }
 
-        // Если ничего не совпало — летим в GPT
+        // --- ACCESSIBILITY (VPN и свайпы) ---
+        if (cmd.contains("включи впн") || cmd.contains("подключи впн")) {
+            val pkg = appsMap["впн"]
+            if (pkg != null) {
+                val intent = packageManager.getLaunchIntentForPackage(pkg)
+                if (intent != null) {
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    startActivity(intent)
+                    reply("Открываю VPN, сейчас нажму подключить...")
+                    executor.execute {
+                        Thread.sleep(2500) // Ждем загрузки VPN
+                        runOnUiThread {
+                            val success = JarvisAccessibilityService.instance?.clickByText(listOf("Connect", "Подключить", "Включить", "On", "Start"))
+                            if (success == true) reply("VPN подключен.") else reply("Не нашел кнопку подключения на экране.")
+                        }
+                    }
+                } else reply("Приложение VPN не найдено.")
+            } else reply("Пакет VPN не настроен в appsMap.")
+            return
+        }
+
+        if (cmd.contains("следующее видео") || cmd.contains("следующее") || cmd.contains("листни")) {
+            val success = JarvisAccessibilityService.instance?.swipeUp()
+            if (success != null) reply("Листаю...") else reply("Служба управления (Accessibility) не включена.")
+            return
+        }
+
+        // --- CHATGPT ---
         if (apiKey.isNotEmpty()) {
             reply("Думаю...")
             askChatGPT(raw)
@@ -293,7 +314,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun showCommandsMenu() {
-        val commands = "<b>Команды:</b><br>• открой (приложение)<br>• позвони (контакт)<br>• прочитай уведомления<br>• не беспокоить<br>• батарея / время<br><br>Или просто задайте любой вопрос ИИ!"
+        val commands = "<b>Команды:</b><br>• открой (приложение)<br>• позвони (контакт)<br>• включи впн<br>• следующее видео / листни<br>• прочитай уведомления<br>• не беспокоить<br>• батарея / время<br><br>Или задайте любой вопрос ИИ!"
         AlertDialog.Builder(this, com.google.android.material.R.style.Theme_Material3_Dark_Dialog_Alert)
             .setTitle("Помощь").setMessage(Html.fromHtml(commands, Html.FROM_HTML_MODE_LEGACY))
             .setPositiveButton("ОК", null).show()
