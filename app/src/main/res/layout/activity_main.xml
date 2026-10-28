@@ -6,7 +6,6 @@
     android:layout_height="match_parent"
     android:background="#0B0B0E">
 
-    <!-- Кастомная шапка -->
     <LinearLayout
         android:id="@+id/header"
         android:layout_width="match_parent"
@@ -17,7 +16,6 @@
         android:orientation="horizontal"
         android:gravity="center_vertical"
         app:layout_constraintTop_toTopOf="parent">
-
         <TextView
             android:id="@+id/toolbarTitle"
             android:layout_width="0dp"
@@ -28,7 +26,6 @@
             android:textSize="22sp"
             android:textStyle="bold"
             android:fontFamily="sans-serif-medium"/>
-
         <ImageButton
             android:id="@+id/btnMenu"
             android:layout_width="40dp"
@@ -36,7 +33,6 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_menu_sort_by_size"
             app:tint="#8B8BFF"/>
-
         <ImageButton
             android:id="@+id/btnClear"
             android:layout_width="40dp"
@@ -47,27 +43,21 @@
             app:tint="#FF5252"/>
     </LinearLayout>
 
-    <!-- Окно чата -->
     <ScrollView
         android:id="@+id/scrollView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:padding="16dp"
+        android:padding="12dp"
         android:clipToPadding="false"
         app:layout_constraintTop_toBottomOf="@id/header"
         app:layout_constraintBottom_toTopOf="@id/bottomBar">
-
-        <TextView
-            android:id="@+id/logView"
+        <LinearLayout
+            android:id="@+id/logContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="#E2E2E8"
-            android:textSize="15sp"
-            android:lineSpacingExtra="10dp"
-            android:fontFamily="sans-serif"/>
+            android:orientation="vertical"/>
     </ScrollView>
 
-    <!-- Панель ввода (Таблетка) -->
     <LinearLayout
         android:id="@+id/bottomBar"
         android:layout_width="match_parent"
@@ -78,7 +68,6 @@
         android:elevation="12dp"
         android:gravity="center_vertical"
         app:layout_constraintBottom_toBottomOf="parent">
-
         <EditText
             android:id="@+id/inputField"
             android:layout_width="0dp"
@@ -92,7 +81,6 @@
             android:paddingEnd="20dp"
             android:inputType="text"
             android:maxLines="1"/>
-
         <ImageButton
             android:id="@+id/voiceButton"
             android:layout_width="48dp"
@@ -101,7 +89,6 @@
             android:background="@drawable/bg_button_mic"
             android:src="@android:drawable/ic_btn_speak_now"
             app:tint="#8B8BFF"/>
-
         <ImageButton
             android:id="@+id/sendButton"
             android:layout_width="48dp"
@@ -111,5 +98,4 @@
             android:src="@android:drawable/ic_menu_send"
             app:tint="#FFFFFF"/>
     </LinearLayout>
-
 </androidx.constraintlayout.widget.ConstraintLayout>

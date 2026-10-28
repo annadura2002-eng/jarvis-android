@@ -11,8 +11,16 @@ android {
         applicationId = "com.jarvis.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "4.0"
+        versionCode = 7
+        versionName = "7.0"
+        
+        // Берем ключ из GitHub Secrets (или ставим пустоту, если его нет)
+        val apiKey = System.getenv("PROXY_API_KEY") ?: ""
+        buildConfigField("String", "DEFAULT_API_KEY", "\"$apiKey\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     signingConfigs {
@@ -44,7 +52,7 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-    
-    // Vosk Offline Wake Word
     implementation("com.alphacephei:vosk-android:0.3.47@aar")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("io.github.kotlin-telegram-bot:kotlin-telegram-bot:6.1.0")
 }

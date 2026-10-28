@@ -32,6 +32,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          PROXY_API_KEY: ${{ secrets.PROXY_API_KEY }}
         run: gradle assembleRelease --no-daemon
 
       - name: Upload APK
