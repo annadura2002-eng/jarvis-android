@@ -94,6 +94,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        window.statusBarColor = android.graphics.Color.parseColor("#0B0B0E")
 
         logContainer = findViewById(R.id.logContainer)
         scrollView = findViewById(R.id.scrollView)

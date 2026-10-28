@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "218263989391-onrpbo7vevhnpobt106buke4kmookame.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.jarvis.app",
+            "certificate_hash": "145770873916fd6c6054f57a69c0431a7cded558"
+          }
+        },
+        {
           "client_id": "218263989391-v6piv6ctb5ab46r9b68jv9bi0jvunb2t.apps.googleusercontent.com",
           "client_type": 3
         }

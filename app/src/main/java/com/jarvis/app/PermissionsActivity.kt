@@ -27,6 +27,7 @@ class PermissionsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_permissions)
+        window.statusBarColor = android.graphics.Color.parseColor("#0B0B0E")
 
         btnMic = findViewById(R.id.btnMic)
         btnContacts = findViewById(R.id.btnContacts)
