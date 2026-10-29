@@ -1,29 +1,35 @@
 package com.jarvis.app
 
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
-import android.view.Gravity
-import android.view.MotionEvent
-import android.view.View
-import android.view.WindowManager
-import android.widget.Button
-import android.widget.EditText
-import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.TextView
-import kotlin.math.abs
+import android.view.*
+import android.view.inputmethod.InputMethodManager
+import android.widget.*
 
 class FloatingBubbleService : Service() {
 
     private lateinit var windowManager: WindowManager
     private lateinit var floatingView: View
     private var chatView: View? = null
+    private var tvAnswer: TextView? = null
     private var isChatOpen = false
+
+    private val answerReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val answer = intent?.getStringExtra("answer") ?: ""
+            if (answer.isNotEmpty()) {
+                tvAnswer?.text = answer
+                tvAnswer?.visibility = View.VISIBLE
+            }
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -31,6 +37,12 @@ class FloatingBubbleService : Service() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(answerReceiver, IntentFilter("BUBBLE_ANSWER"), Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(answerReceiver, IntentFilter("BUBBLE_ANSWER"))
+        }
+
         val bubble = ImageView(this)
         bubble.setImageResource(android.R.drawable.ic_btn_speak_now)
         bubble.setColorFilter(Color.parseColor("#2DD4BF"))
@@ -65,14 +77,8 @@ class FloatingBubbleService : Service() {
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
-                        if (abs(event.rawX - initialTouchX) < 10 && abs(event.rawY - initialTouchY) < 10) {
-                            if (isChatOpen) {
-                                chatView?.let { windowManager.removeView(it) }
-                                chatView = null
-                                isChatOpen = false
-                            } else {
-                                showMiniChat()
-                            }
+                        if (Math.abs(event.rawX - initialTouchX) < 10 && Math.abs(event.rawY - initialTouchY) < 10) {
+                            if (isChatOpen) closeChat() else showMiniChat()
                         }
                         return true
                     }
@@ -89,50 +95,28 @@ class FloatingBubbleService : Service() {
         if (isChatOpen) return
         isChatOpen = true
 
-        val chatLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#F21C1C1C"))
-            setPadding(32, 32, 32, 32)
-        }
-        
-        val title = TextView(this).apply {
-            text = "Jarvis AI"
-            setTextColor(Color.parseColor("#2DD4BF"))
-            textSize = 18f
-            setPadding(0, 0, 0, 16)
-        }
-        
-        val input = EditText(this).apply {
-            hint = "Задайте вопрос..."
-            setTextColor(Color.WHITE)
-            setHintTextColor(Color.GRAY)
-            setBackgroundColor(Color.parseColor("#262626"))
-            setPadding(24, 24, 24, 24)
-        }
-        
-        val btnSend = Button(this).apply {
-            text = "Отправить"
-            setBackgroundColor(Color.parseColor("#2DD4BF"))
-            setOnClickListener {
-                val question = input.text.toString()
-                if (question.isNotEmpty()) {
-                    input.setText("")
-                    val intent = Intent("MINI_CHAT_COMMAND")
-                    intent.putExtra("command", question)
-                    sendBroadcast(intent)
-                }
+        val chatLayout = layoutInflater.inflate(R.layout.dialog_bubble_chat, null)
+        tvAnswer = chatLayout.findViewById(R.id.tvBubbleAnswer)
+        val etInput = chatLayout.findViewById<EditText>(R.id.etBubbleInput)
+        val btnSend = chatLayout.findViewById<Button>(R.id.btnBubbleSend)
+
+        btnSend.setOnClickListener {
+            val question = etInput.text.toString()
+            if (question.isNotEmpty()) {
+                etInput.setText("")
+                tvAnswer?.visibility = View.VISIBLE
+                tvAnswer?.text = "Думаю..."
+                val intent = Intent("MINI_CHAT_COMMAND")
+                intent.putExtra("command", question)
+                sendBroadcast(intent)
             }
         }
 
-        chatLayout.addView(title)
-        chatLayout.addView(input)
-        chatLayout.addView(btnSend)
-        
         val paramsChat = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM,
             PixelFormat.TRANSLUCENT
         )
         paramsChat.gravity = Gravity.BOTTOM
@@ -140,11 +124,23 @@ class FloatingBubbleService : Service() {
         
         chatView = chatLayout
         windowManager.addView(chatView, paramsChat)
+
+        // Даем фокус и открываем клавиатуру
+        etInput.requestFocus()
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.showSoftInput(etInput, InputMethodManager.SHOW_IMPLICIT)
+    }
+
+    private fun closeChat() {
+        chatView?.let { windowManager.removeView(it) }
+        chatView = null
+        isChatOpen = false
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        try { unregisterReceiver(answerReceiver) } catch (e: Exception) {}
         if (::floatingView.isInitialized) windowManager.removeView(floatingView)
-        chatView?.let { windowManager.removeView(it) }
+        closeChat()
     }
 }

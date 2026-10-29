@@ -828,7 +828,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun logUser(text: String) { runOnUiThread { addBubble(text, true) } }
-    private fun reply(text: String) { runOnUiThread { addBubble(text, false) }; neuralTTS.speak(text, selectedVoice) }
+    private fun reply(text: String) { 
+        runOnUiThread { addBubble(text, false) }
+        neuralTTS.speak(text, selectedVoice)
+        // Отправляем ответ в пузырь
+        val intent = Intent("BUBBLE_ANSWER")
+        intent.putExtra("answer", text)
+        sendBroadcast(intent)
+    }
     
     private fun addBubble(text: String, isUser: Boolean) {
         val tv = TextView(this)
