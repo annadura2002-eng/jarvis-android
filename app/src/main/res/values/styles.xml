@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Базовый стиль для всех текстов -->
+    <style name="AppTheme.Text" parent="TextAppearance.AppCompat">
+        <item name="fontFamily">@font/manrope_regular</item>
+    </style>
+    
+    <style name="AppTheme.Text.Bold">
+        <item name="fontFamily">@font/manrope_bold</item>
+    </style>
+</resources>

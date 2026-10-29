@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="24dp"
+    android:background="#1C1C1C">
+    
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Команды"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Основные:\n• открой (название приложения)\n• позвони (имя контакта)\n• напиши (имя) (текст)\n• батарея\n• время\n• будильник на 7:30\n\nУправление:\n• нажми (кнопку на экране)\n• листай / вниз\n• включи впн\n• запиши звонок\n\nНастройки:\n• секрет (ваше слово)\n• выбери голос\n\nИнтернет:\n• найди в ютубе (запрос)\n• загугли (запрос)\n• маршрут до (место)"
+            android:textColor="#E0E0E0"
+            android:textSize="15sp"
+            android:lineSpacingExtra="8dp"/>
+    </LinearLayout>
+</ScrollView>

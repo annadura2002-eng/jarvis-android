@@ -7,26 +7,26 @@ import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
 import android.view.*
-import android.widget.ImageView
-import android.widget.Toast
-import androidx.core.content.ContextCompat
+import android.widget.*
 
 class FloatingBubbleService : Service() {
 
     private lateinit var windowManager: WindowManager
     private lateinit var floatingView: View
+    private var chatView: View? = null
+    private var isChatOpen = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
-        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-
-        // Создаем шар программно (без layout файла)
+        windowManager = getSystemService(WINDOW_SERVICE) as WINDOW_SERVICE
+        
+        // Создаем шар
         val bubble = ImageView(this)
         bubble.setImageResource(android.R.drawable.ic_btn_speak_now)
-        bubble.setColorFilter(Color.parseColor("#6C63FF"))
-        bubble.setBackgroundResource(R.drawable.bg_button_primary) // Градиентный фон
+        bubble.setColorFilter(Color.parseColor("#2DD4BF"))
+        bubble.setBackgroundResource(R.drawable.bg_button_primary)
         bubble.setPadding(30, 30, 30, 30)
 
         val params = WindowManager.LayoutParams(
@@ -37,23 +37,17 @@ class FloatingBubbleService : Service() {
             PixelFormat.TRANSLUCENT
         )
         params.gravity = Gravity.TOP or Gravity.START
-        params.x = 0
-        params.y = 200
+        params.x = 0; params.y = 200
 
-        // Логика перетаскивания
         bubble.setOnTouchListener(object : View.OnTouchListener {
-            private var initialX = 0
-            private var initialY = 0
-            private var initialTouchX = 0f
-            private var initialTouchY = 0f
+            private var initialX = 0; private var initialY = 0
+            private var initialTouchX = 0f; private var initialTouchY = 0f
 
             override fun onTouch(v: View?, event: MotionEvent?): Boolean {
                 when (event?.action) {
                     MotionEvent.ACTION_DOWN -> {
-                        initialX = params.x
-                        initialY = params.y
-                        initialTouchX = event.rawX
-                        initialTouchY = event.rawY
+                        initialX = params.x; initialY = params.y
+                        initialTouchX = event.rawX; initialTouchY = event.rawY
                         return true
                     }
                     MotionEvent.ACTION_MOVE -> {
@@ -63,12 +57,8 @@ class FloatingBubbleService : Service() {
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
-                        // Если сдвинули не сильно — считаем это кликом
                         if (Math.abs(event.rawX - initialTouchX) < 10 && Math.abs(event.rawY - initialTouchY) < 10) {
-                            // Открываем MainActivity в режиме всплывающего окна (или просто открываем)
-                            val intent = Intent(this@FloatingBubbleService, MainActivity::class.java)
-                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                            startActivity(intent)
+                            showMiniChat() // Открываем мини-чат
                         }
                         return true
                     }
@@ -81,10 +71,67 @@ class FloatingBubbleService : Service() {
         windowManager.addView(floatingView, params)
     }
 
+    private fun showMiniChat() {
+        if (isChatOpen) return
+        isChatOpen = true
+
+        val chatLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#E61C1C1C"))
+            setPadding(32, 32, 32, 32)
+        }
+        
+        val title = TextView(this).apply {
+            text = "Jarvis"
+            setTextColor(Color.parseColor("#2DD4BF"))
+            textSize = 18f
+            setPadding(0, 0, 0, 16)
+        }
+        
+        val input = EditText(this).apply {
+            hint = "Задайте вопрос..."
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.GRAY)
+            setBackgroundColor(Color.parseColor("#262626"))
+            setPadding(24, 24, 24, 24)
+        }
+        
+        val btnSend = Button(this).apply {
+            text = "Спросить ИИ"
+            setBackgroundColor(Color.parseColor("#2DD4BF"))
+            setOnClickListener {
+                val question = input.text.toString()
+                if (question.isNotEmpty()) {
+                    input.setText("Думаю...")
+                    // Отправляем запрос в ИИ (через BroadcastReceiver в MainActivity)
+                    val intent = Intent("MINI_CHAT_COMMAND")
+                    intent.putExtra("command", question)
+                    sendBroadcast(intent)
+                }
+            }
+        }
+
+        chatLayout.addView(title)
+        chatLayout.addView(input)
+        chatLayout.addView(btnSend)
+        
+        val paramsChat = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT
+        )
+        paramsChat.gravity = Gravity.BOTTOM
+        paramsChat.y = 150
+        
+        chatView = chatLayout
+        windowManager.addView(chatView, paramsChat)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
-        if (::floatingView.isInitialized) {
-            windowManager.removeView(floatingView)
-        }
+        if (::floatingView.isInitialized) windowManager.removeView(floatingView)
+        chatView?.let { windowManager.removeView(it) }
     }
 }
