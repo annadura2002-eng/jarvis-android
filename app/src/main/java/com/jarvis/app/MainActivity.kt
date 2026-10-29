@@ -9,6 +9,7 @@ import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.*
 import android.provider.ContactsContract
+import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -19,7 +20,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.firebase.auth.FirebaseAuth
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
@@ -66,7 +66,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Устанавливаем тему
         setTheme(R.style.Theme_Jarvis)
         setContentView(R.layout.activity_main)
         
@@ -120,15 +119,21 @@ class MainActivity : AppCompatActivity() {
             if (t.isNotEmpty()) { inputField.text.clear(); handleCommand(t) }
         }
         voiceButton.setOnClickListener { showBeautifulVoiceInput() }
-        btnMenu.setOnClickListener { showBottomSheetMenu() }
+        btnMenu.setOnClickListener { showMenuDialog() }
     }
 
-    // Красивое меню снизу (Bottom Sheet)
-    private fun showBottomSheetMenu() {
-        val dialog = BottomSheetDialog(this, R.style.Theme_Jarvis)
-        val view = layoutInflater.inflate(android.R.layout.simple_list_item_1, null) // Заглушка, лучше создать свой layout
-        // Здесь должен быть ваш layout для меню, для примера используем AlertDialog
-        
+    // ФУНКЦИЯ ВКЛЮЧЕНИЯ ПУЗЫРЯ
+    private fun toggleFloatingBubble() {
+        if (!Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, "Разрешите отображение поверх других окон", Toast.LENGTH_LONG).show()
+            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+        } else {
+            startService(Intent(this, FloatingBubbleService::class.java))
+            Toast.makeText(this, "Пузырь включен! Вы можете перемещать его.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showMenuDialog() {
         val menuLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 32, 48, 32) }
         
         val tvCommands = TextView(this).apply {
@@ -136,9 +141,18 @@ class MainActivity : AppCompatActivity() {
             setTextColor(Color.WHITE); textSize = 15f; setLineSpacing(0f, 1.2f)
         }
 
+        val btnBubble = Button(this).apply {
+            text = "Включить плавающий пузырь"
+            setBackgroundColor(Color.parseColor("#6C63FF")); setTextColor(Color.WHITE)
+            setOnClickListener { 
+                toggleFloatingBubble()
+                (parent as? android.app.Dialog)?.dismiss() 
+            }
+        }
+
         val btnVoiceSettings = Button(this).apply {
             text = "Выбрать нейроголос"
-            setBackgroundColor(Color.parseColor("#6C63FF")); setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#2A2A35")); setTextColor(Color.WHITE)
             setOnClickListener { (parent as? android.app.Dialog)?.dismiss(); showVoiceSettingsDialog() }
         }
 
@@ -152,8 +166,7 @@ class MainActivity : AppCompatActivity() {
             text = "Выйти"; setBackgroundColor(Color.parseColor("#FF5252")); setTextColor(Color.WHITE)
             setOnClickListener { FirebaseAuth.getInstance().signOut(); startActivity(Intent(this@MainActivity, LoginActivity::class.java)); finish() }
         }
-        
-        menuLayout.addView(tvCommands); menuLayout.addView(btnVoiceSettings); menuLayout.addView(btnClear); menuLayout.addView(btnLogout)
+        menuLayout.addView(tvCommands); menuLayout.addView(btnBubble); menuLayout.addView(btnVoiceSettings); menuLayout.addView(btnClear); menuLayout.addView(btnLogout)
 
         AlertDialog.Builder(this, com.google.android.material.R.style.Theme_Material3_Dark_Dialog_Alert)
             .setTitle("Меню").setView(menuLayout).setPositiveButton("Закрыть", null).show()
@@ -193,13 +206,10 @@ class MainActivity : AppCompatActivity() {
     private fun showBeautifulVoiceInput() {
         voiceDialog = Dialog(this)
         voiceDialog?.setContentView(R.layout.dialog_voice)
-        
         equalizerView = voiceDialog?.findViewById(R.id.equalizerView)
         val statusView = voiceDialog?.findViewById<TextView>(R.id.voiceStatus)
-
         equalizerView?.startAnimation()
         statusView?.text = "Слушаю..."
-
         speechRecognizer.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
@@ -211,8 +221,7 @@ class MainActivity : AppCompatActivity() {
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
         speechRecognizer.setRecognitionListener(object : RecognitionListener {
             override fun onResults(results: Bundle?) {
-                equalizerView?.stopAnimation()
-                voiceDialog?.dismiss()
+                equalizerView?.stopAnimation(); voiceDialog?.dismiss()
                 val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
                 if (!text.isNullOrEmpty()) handleCommand(text)
             }
@@ -324,13 +333,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // НОВЫЙ ДИЗАЙН БАБЛА (Стеклянный)
     private fun animateBotReply(fullText: String) {
         val tv = TextView(this)
-        tv.textSize = 15f
-        tv.setPadding(32, 24, 32, 24)
-        
-        // Используем градиентный фон для текста ИИ
+        tv.textSize = 15f; tv.setPadding(32, 24, 32, 24)
         val drawable = GradientDrawable().apply {
             colors = intArrayOf(Color.parseColor("#2A2A35"), Color.parseColor("#1E1E28"))
             gradientType = GradientDrawable.LINEAR_GRADIENT
@@ -339,15 +344,10 @@ class MainActivity : AppCompatActivity() {
             setStroke(1, Color.parseColor("#33FFFFFF"))
         }
         tv.background = drawable
-
         val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-        params.setMargins(0, 8, 64, 8)
-        tv.layoutParams = params
-        logContainer.addView(tv)
-        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-        
+        params.setMargins(0, 8, 64, 8); tv.layoutParams = params
+        logContainer.addView(tv); scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
         neuralTTS.speak(fullText, selectedVoice)
-
         var index = 0
         val runnable = object : Runnable {
             override fun run() {
@@ -362,15 +362,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun logUser(text: String) { runOnUiThread { addBubble(text, true) } }
     private fun reply(text: String) { runOnUiThread { addBubble(text, false) }; neuralTTS.speak(text, selectedVoice) }
-    
     private fun addBubble(text: String, isUser: Boolean) {
         val tv = TextView(this)
         val spannable = SpannableString(text)
         spannable.setSpan(ForegroundColorSpan(Color.WHITE), 0, text.length, 0)
-        
-        if (isUser) {
-            tv.setBackgroundColor(Color.parseColor("#2A2A35"))
-        } else {
+        if (isUser) tv.setBackgroundColor(Color.parseColor("#2A2A35"))
+        else {
             val drawable = GradientDrawable().apply {
                 colors = intArrayOf(Color.parseColor("#2A2A35"), Color.parseColor("#1E1E28"))
                 gradientType = GradientDrawable.LINEAR_GRADIENT
@@ -380,7 +377,6 @@ class MainActivity : AppCompatActivity() {
             }
             tv.background = drawable
         }
-        
         tv.text = spannable; tv.textSize = 15f; tv.setPadding(32, 24, 32, 24)
         val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         params.setMargins(if (isUser) 64 else 0, 8, if (isUser) 0 else 64, 8)
