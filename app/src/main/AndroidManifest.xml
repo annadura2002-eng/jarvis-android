@@ -85,5 +85,6 @@
             </intent-filter>
             <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility_service_config" />
         </service>
+        <service android:name=".AlarmService" android:exported="false"/>
     </application>
 </manifest>

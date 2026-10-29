@@ -442,16 +442,19 @@ class MainActivity : AppCompatActivity() {
 
         // --- ТАЙМЕРЫ И НАПОМИНАНИЯ ---
         if (cmd.contains("таймер на ")) {
-            val num = cmd.replace("таймер на ", "").filter { it.isDigit() }.toIntOrNull()
-            if (num != null) {
-                val intent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
-                    putExtra(AlarmClock.EXTRA_LENGTH, num * 60)
-                    putExtra(AlarmClock.EXTRA_SKIP_UI, true)
-                }
-                startActivity(intent)
-                reply("Таймер на $num минут.")
+            val timePart = cmd.replace("таймер на ", "").trim()
+            var mins = 0
+            if (timePart.contains("секунд")) mins = (timePart.filter { it.isDigit() }.toIntOrNull() ?: 0) / 60
+            else if (timePart.contains("минут")) mins = timePart.filter { it.isDigit() }.toIntOrNull() ?: 0
+            if (mins > 0) {
+                val cal = java.util.Calendar.getInstance()
+                cal.add(java.util.Calendar.MINUTE, mins)
+                setJarvisAlarm(cal.get(java.util.Calendar.HOUR_OF_DAY), cal.get(java.util.Calendar.MINUTE))
             } else reply("Скажите: таймер на 5 минут")
             return
+        }
+        }
+        }
         }
 
         if (cmd.startsWith("напомни через ")) {
