@@ -227,6 +227,7 @@ class MainActivity : AppCompatActivity() {
         view.findViewById<LinearLayout>(R.id.btnMenuCommands).setOnClickListener { bottomSheetDialog.dismiss(); showCommandsList() }
         view.findViewById<LinearLayout>(R.id.btnMenuSecrets).setOnClickListener { bottomSheetDialog.dismiss(); showSecretsDialog() }
         view.findViewById<LinearLayout>(R.id.btnMenuVoice).setOnClickListener { bottomSheetDialog.dismiss(); showVoiceSettingsDialog() }
+        view.findViewById<LinearLayout>(R.id.btnMenuSettings).setOnClickListener { bottomSheetDialog.dismiss(); apiBar.visibility = LinearLayout.VISIBLE }
         view.findViewById<LinearLayout>(R.id.btnMenuBubble).setOnClickListener { bottomSheetDialog.dismiss(); toggleBubble() }
         view.findViewById<LinearLayout>(R.id.btnMenuLogout).setOnClickListener {
             bottomSheetDialog.dismiss(); FirebaseAuth.getInstance().signOut()
@@ -300,7 +301,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun showVoiceSettingsDialog() {
         val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 32, 48, 32) }
-        val voices = arrayOf("nova (женский)", "shimmer (женский)", "alloy (нейтральный)", "onyx (мужской)", "echo (мужской)", "fable (женский)")
+        val voices = arrayOf(
+            "nova (женский, мягкий)", 
+            "shimmer (женский, звонкий)", 
+            "alloy (нейтральный)", 
+            "onyx (мужской, глубокий)", 
+            "echo (мужской, спокойный)", 
+            "fable (женский, с акцентом)"
+        )
         val spinner = Spinner(this)
         spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, voices)
         val currentIndex = voices.indexOfFirst { it.startsWith(selectedVoice) }

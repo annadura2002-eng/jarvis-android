@@ -15,79 +15,28 @@
         android:textStyle="bold"
         android:layout_marginBottom="24dp"/>
 
-    <!-- Кнопка: Список команд -->
-    <LinearLayout
-        android:id="@+id/btnMenuCommands"
-        android:layout_width="match_parent"
-        android:layout_height="60dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:background="@drawable/bg_glass"
-        android:padding="16dp"
-        android:layout_marginBottom="12dp">
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="📋 Список команд"
-            android:textColor="#FFFFFF"
-            android:textSize="16sp"/>
+    <LinearLayout android:id="@+id/btnMenuCommands" android:layout_width="match_parent" android:layout_height="60dp" android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/bg_glass" android:padding="16dp" android:layout_marginBottom="12dp">
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="📋 Список команд" android:textColor="#FFFFFF" android:textSize="16sp"/>
     </LinearLayout>
 
-    <!-- Кнопка: Голоса -->
-    <LinearLayout
-        android:id="@+id/btnMenuVoice"
-        android:layout_width="match_parent"
-        android:layout_height="60dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:background="@drawable/bg_glass"
-        android:padding="16dp"
-        android:layout_marginBottom="12dp">
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="🎙 Выбрать голос"
-            android:textColor="#FFFFFF"
-            android:textSize="16sp"/>
+    <LinearLayout android:id="@+id/btnMenuSecrets" android:layout_width="match_parent" android:layout_height="60dp" android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/bg_glass" android:padding="16dp" android:layout_marginBottom="12dp">
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="🔒 Секретные команды" android:textColor="#FFFFFF" android:textSize="16sp"/>
     </LinearLayout>
 
-    <!-- Кнопка: Плавающий пузырь (Вкл/Выкл) -->
-    <LinearLayout
-        android:id="@+id/btnMenuBubble"
-        android:layout_width="match_parent"
-        android:layout_height="60dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:background="@drawable/bg_glass"
-        android:padding="16dp"
-        android:layout_marginBottom="12dp">
-        <TextView
-            android:id="@+id/tvBubbleStatus"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="🫧 Включить пузырь"
-            android:textColor="#FFFFFF"
-            android:textSize="16sp"/>
+    <LinearLayout android:id="@+id/btnMenuVoice" android:layout_width="match_parent" android:layout_height="60dp" android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/bg_glass" android:padding="16dp" android:layout_marginBottom="12dp">
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="🎙 Выбрать нейроголос" android:textColor="#FFFFFF" android:textSize="16sp"/>
     </LinearLayout>
 
-    <!-- Кнопка: Выйти -->
-    <LinearLayout
-        android:id="@+id/btnMenuLogout"
-        android:layout_width="match_parent"
-        android:layout_height="60dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:background="@drawable/bg_glass"
-        android:padding="16dp">
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="🚪 Выйти"
-            android:textColor="#FF5252"
-            android:textSize="16sp"/>
+    <!-- ВОЗВРАЩАЕМ НАСТРОЙКИ -->
+    <LinearLayout android:id="@+id/btnMenuSettings" android:layout_width="match_parent" android:layout_height="60dp" android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/bg_glass" android:padding="16dp" android:layout_marginBottom="12dp">
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="⚙️ Ввести API-ключ" android:textColor="#FFFFFF" android:textSize="16sp"/>
+    </LinearLayout>
+
+    <LinearLayout android:id="@+id/btnMenuBubble" android:layout_width="match_parent" android:layout_height="60dp" android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/bg_glass" android:padding="16dp" android:layout_marginBottom="12dp">
+        <TextView android:id="@+id/tvBubbleStatus" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="🫧 Включить пузырь" android:textColor="#FFFFFF" android:textSize="16sp"/>
+    </LinearLayout>
+
+    <LinearLayout android:id="@+id/btnMenuLogout" android:layout_width="match_parent" android:layout_height="60dp" android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/bg_glass" android:padding="16dp">
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="🚪 Выйти" android:textColor="#FF5252" android:textSize="16sp"/>
     </LinearLayout>
 </LinearLayout>
