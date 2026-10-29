@@ -27,7 +27,7 @@
         <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="🎙 Выбрать нейроголос" android:textColor="#FFFFFF" android:textSize="16sp"/>
     </LinearLayout>
 
-    <!-- ВОЗВРАЩАЕМ НАСТРОЙКИ -->
+    <!-- КНОПКА НАСТРОЕК -->
     <LinearLayout android:id="@+id/btnMenuSettings" android:layout_width="match_parent" android:layout_height="60dp" android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/bg_glass" android:padding="16dp" android:layout_marginBottom="12dp">
         <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="⚙️ Ввести API-ключ" android:textColor="#FFFFFF" android:textSize="16sp"/>
     </LinearLayout>
