@@ -2,26 +2,19 @@ package com.jarvis.app
 
 import android.Manifest
 import android.app.NotificationManager
-import android.content.BroadcastReceiver
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
+import android.content.*
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
-import android.media.AudioManager
+import android.location.Location
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.AlarmClock
 import android.provider.ContactsContract
 import android.provider.Settings
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import android.telephony.PhoneStateListener
-import android.telephony.SmsManager
 import android.telephony.TelephonyManager
 import android.text.Html
 import android.text.SpannableString
@@ -31,6 +24,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
 import com.google.firebase.auth.FirebaseAuth
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
@@ -53,12 +48,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var tts: TextToSpeech? = null
     private val executor = Executors.newSingleThreadExecutor()
     private val client = OkHttpClient()
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
     
     private var isCalling: Boolean = false
     private var callStartTime: Long = 0
     private var assistantName = "Jarvis"
-    private var isFlashlightOn = false
     private var apiKey = ""
+    
+    private val ADMIN_EMAIL = "russkietop4ik@gmail.com"
+    private val ADMIN_SECRET_KEY = "sk-a7KHDbwMldwXfWer96w2LrYd5JWzFvxG"
 
     private val wakeWordReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -66,14 +64,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             if (cmd.isNotEmpty()) runOnUiThread { handleCommand(cmd) }
         }
     }
-
-    private val appsMap = mapOf(
-        "телеграм" to "org.telegram.messenger", "ютуб" to "com.google.android.youtube",
-        "вк" to "com.vkontakte.android", "тикток" to "com.zhiliaoapp.musically",
-        "вотсап" to "com.whatsapp", "хром" to "com.android.chrome",
-        "камера" to "com.transsion.camera", "настройки" to "com.android.settings",
-        "happ" to "com.happvpn.app", "впн" to "com.happvpn.app"
-    )
 
     private val requestPerms = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
     private val speechLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -87,6 +77,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         window.statusBarColor = Color.parseColor("#0B0B0E")
+        
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
         logContainer = findViewById(R.id.logContainer)
         scrollView = findViewById(R.id.scrollView)
@@ -102,14 +94,22 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         val prefs = getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE)
         assistantName = prefs.getString("assistant_name", "Jarvis") ?: "Jarvis"
+        val currentUser = FirebaseAuth.getInstance().currentUser?.email ?: ""
         apiKey = prefs.getString("api_key", "") ?: ""
-        if (apiKey.isEmpty()) apiKey = BuildConfig.DEFAULT_API_KEY
+        if (currentUser == ADMIN_EMAIL && apiKey.isEmpty()) {
+            apiKey = ADMIN_SECRET_KEY
+            prefs.edit().putString("api_key", apiKey).apply()
+        }
+        
         apiKeyField.setText(apiKey)
         toolbarTitle.text = assistantName
 
         tts = TextToSpeech(this, this)
         requestAllPermissions()
         try { setupCallListener() } catch (e: Exception) { }
+        
+        // Запуск сервиса геолокации
+        startService(Intent(this, GeoService::class.java))
 
         val serviceIntent = Intent(this, VoiceService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
@@ -123,10 +123,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         btnSaveKey.setOnClickListener {
             apiKey = apiKeyField.text.toString().trim()
             prefs.edit().putString("api_key", apiKey).apply()
-            reply("Ключ сохранен! Теперь ИИ работает.")
+            reply("Ключ сохранен!")
             apiBar.visibility = LinearLayout.GONE
         }
-
         sendButton.setOnClickListener {
             val t = inputField.text.toString().trim()
             if (t.isNotEmpty()) { inputField.text.clear(); handleCommand(t) }
@@ -137,23 +136,27 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun showMenuDialog() {
-        val maskedKey = if (apiKey.length > 8) apiKey.take(5) + "****************" + apiKey.takeLast(4) else "Не установлен"
-        
         val menuLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(48, 32, 48, 32)
         }
+        
+        val prefs = getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE)
+        val autoReplyEnabled = prefs.getBoolean("auto_reply", false)
 
-        val tvKey = TextView(this).apply {
-            text = "Ваш ключ ИИ:\n$maskedKey\n(Нажмите, чтобы скопировать)"
-            setTextColor(Color.parseColor("#8B8BFF"))
-            textSize = 16f
-            setPadding(0, 0, 0, 32)
+        val tvCommands = TextView(this).apply {
+            text = "Список команд:\n• позвони (контакт/номер)\n• открой (приложение)\n• прочитай экран\n• сколько лет (вопрос)\n• запомни дом (гео-триггер)\n\nНастройки:"
+            setTextColor(Color.WHITE)
+            textSize = 14f
         }
-        tvKey.setOnClickListener {
-            val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-            clipboard.setPrimaryClip(ClipData.newPlainText("API Key", apiKey))
-            Toast.makeText(this, "Ключ скопирован!", Toast.LENGTH_SHORT).show()
+
+        val toggleAutoReply = Switch(this).apply {
+            text = "Авто-ответчик на сообщения"
+            isChecked = autoReplyEnabled
+            setOnCheckedChangeListener { _, isChecked ->
+                prefs.edit().putBoolean("auto_reply", isChecked).apply()
+                reply(if (isChecked) "Авто-ответ включен" else "Авто-ответ выключен")
+            }
         }
 
         val btnChangeKey = Button(this).apply {
@@ -162,7 +165,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             setTextColor(Color.WHITE)
             setOnClickListener {
                 apiBar.visibility = LinearLayout.VISIBLE
-                // Закрываем диалог
                 (parent as? android.app.Dialog)?.dismiss()
             }
         }
@@ -178,12 +180,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
         }
 
-        menuLayout.addView(tvKey)
+        menuLayout.addView(tvCommands)
+        menuLayout.addView(toggleAutoReply)
         menuLayout.addView(btnChangeKey)
         menuLayout.addView(btnLogout)
 
         AlertDialog.Builder(this, com.google.android.material.R.style.Theme_Material3_Dark_Dialog_Alert)
-            .setTitle("Настройки профиля")
+            .setTitle("Меню и Настройки")
             .setView(menuLayout)
             .setPositiveButton("Закрыть", null)
             .show()
@@ -193,18 +196,30 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val cmd = raw.lowercase(Locale.ROOT).trim()
         logUser(raw)
 
+        if (cmd.contains("запомни дом")) {
+            saveHomeLocation()
+            return
+        }
+        if (cmd.contains("прочитай экран") || cmd.contains("что на экране")) {
+            val screenText = JarvisAccessibilityService.instance?.getScreenText()
+            if (screenText.isNullOrEmpty()) reply("На экране пусто или служба Accessibility выключена.")
+            else reply("На экране написано: $screenText")
+            return
+        }
         if (cmd.startsWith("смени имя на ")) {
             assistantName = cmd.replace("смени имя на ", "").trim().replaceFirstChar { it.uppercase() }
             getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE).edit().putString("assistant_name", assistantName).apply()
-            reply("Теперь меня зовут $assistantName. Перезапустите приложение.")
+            reply("Теперь меня зовут $assistantName.")
             return
         }
         if (cmd.startsWith("позвони ")) {
             val target = cmd.substringAfter(" ").trim()
-            val num = findContactNumber(target)
-            if (num != null) {
-                startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:$num"))); reply("Соединяю...")
-            } else reply("Контакт не найден")
+            if (target.replace(" ", "").replace("+","").all { it.isDigit() }) {
+                callNumber(target)
+            } else {
+                val num = findContactNumber(target)
+                if (num != null) callNumber(num) else reply("Контакт не найден")
+            }
             return
         }
         if (cmd.startsWith("открой ")) {
@@ -212,154 +227,54 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             if (openApp(app)) reply("Открываю") else reply("Не найдено")
             return
         }
-        if (cmd.contains("прочитай уведомления")) {
-             val notifs = NotificationService.latestNotifications
-             if (notifs.isEmpty()) reply("Новых уведомлений нет.") else reply(notifs.joinToString(". "))
-             return
-        }
-        if (cmd.contains("не беспокоить")) {
-            val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-            if (nm.isNotificationPolicyAccessGranted) {
-                nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_NONE)
-                reply("Режим включен.")
-            } else startActivity(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+        if (cmd.contains("включи впн")) {
+            val intent = packageManager.getLaunchIntentForPackage("com.happvpn.app")
+            if (intent != null) {
+                startActivity(intent); reply("Открываю VPN...")
+                executor.execute {
+                    Thread.sleep(2500)
+                    runOnUiThread {
+                        val success = JarvisAccessibilityService.instance?.clickByText(listOf("Connect", "Подключить", "Включить"))
+                        if (success == true) reply("VPN подключен.") else reply("Кнопка не найдена.")
+                    }
+                }
+            }
             return
         }
         if (cmd.contains("батаре")) {
             val bm = getSystemService(BATTERY_SERVICE) as android.os.BatteryManager
             reply("Заряд: ${bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)}%"); return
         }
-        if (cmd.contains("время")) {
-            reply("Сейчас ${SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())}"); return
-        }
-        if (cmd.contains("включи впн") || cmd.contains("подключи впн")) {
-            val pkg = appsMap["впн"]
-            if (pkg != null) {
-                val intent = packageManager.getLaunchIntentForPackage(pkg)
-                if (intent != null) {
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    startActivity(intent)
-                    reply("Открываю VPN...")
-                    executor.execute {
-                        Thread.sleep(2500)
-                        runOnUiThread {
-                            val success = JarvisAccessibilityService.instance?.clickByText(listOf("Connect", "Подключить", "Включить", "On", "Start"))
-                            if (success == true) reply("VPN подключен.") else reply("Кнопка не найдена.")
-                        }
-                    }
-                }
-            } else reply("VPN не найдено.")
-            return
-        }
-        if (cmd.contains("следующее видео") || cmd.contains("следующее") || cmd.contains("листни")) {
-            val success = JarvisAccessibilityService.instance?.swipeUp()
-            if (success != null) reply("Листаю...") else reply("Служба Accessibility не включена.")
-            return
-        }
 
         if (apiKey.isNotEmpty()) {
             reply("Думаю...")
             askChatGPT(raw)
         } else {
-            reply("Для ИИ нужен ключ! Нажмите на три полоски вверху -> Изменить ключ ИИ.")
+            reply("Для ИИ нужен ключ! Нажмите на три полоски вверху.")
         }
     }
 
-    private fun askChatGPT(prompt: String) {
-        executor.execute {
-            try {
-                val json = JSONObject().apply {
-                    put("model", "gpt-4o-mini")
-                    put("messages", JSONArray().put(JSONObject().apply {
-                        put("role", "user"); put("content", prompt)
-                    }))
+    private fun saveHomeLocation() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
+                if (location != null) {
+                    getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE).edit()
+                        .putString("home_lat", location.latitude.toString())
+                        .putString("home_lon", location.longitude.toString())
+                        .apply()
+                    reply("Дом запомнен! Теперь приду домой — включу Wi-Fi.")
+                } else {
+                    reply("Не удалось получить GPS-координаты.")
                 }
-                val body = json.toString().toRequestBody("application/json".toMediaType())
-                val request = Request.Builder()
-                    .url("https://api.proxyapi.ru/openai/v1/chat/completions")
-                    .addHeader("Authorization", "Bearer $apiKey")
-                    .post(body)
-                    .build()
-
-                client.newCall(request).execute().use { response ->
-                    val resBody = response.body?.string()
-                    if (response.isSuccessful && resBody != null) {
-                        val answer = JSONObject(resBody).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
-                        runOnUiThread { reply(answer) }
-                    } else {
-                        runOnUiThread { reply("Ошибка ИИ: ${response.code}") }
-                    }
-                }
-            } catch (e: Exception) {
-                runOnUiThread { reply("Ошибка сети.") }
             }
-        }
-    }
-
-    private fun logUser(text: String) { runOnUiThread { addBubble(text, true) } }
-    private fun reply(text: String) {
-        runOnUiThread { addBubble(text, false) }
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "j")
-    }
-
-    private fun addBubble(text: String, isUser: Boolean) {
-        val tv = TextView(this)
-        val spannable = SpannableString(text)
-        spannable.setSpan(ForegroundColorSpan(Color.WHITE), 0, text.length, 0)
-        
-        if (isUser) {
-            tv.setBackgroundColor(Color.parseColor("#2A2A35"))
         } else {
-            val drawable = GradientDrawable().apply {
-                setColor(Color.parseColor("#1C1C26")); cornerRadius = 24f
-                setStroke(2, Color.parseColor("#5B5BFF"))
-            }
-            tv.background = drawable
+            requestPerms.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
         }
-        tv.text = spannable
-        tv.textSize = 15f
-        tv.setPadding(32, 24, 32, 24)
-        
-        val params = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        )
-        params.setMargins(if (isUser) 64 else 0, 8, if (isUser) 0 else 64, 8)
-        tv.layoutParams = params
-        logContainer.addView(tv)
-        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
     }
 
-    private fun requestAllPermissions() {
-        val perms = mutableListOf(
-            Manifest.permission.RECORD_AUDIO, Manifest.permission.CALL_PHONE,
-            Manifest.permission.READ_CONTACTS, Manifest.permission.SEND_SMS,
-            Manifest.permission.READ_PHONE_STATE, Manifest.permission.POST_NOTIFICATIONS
-        )
-        val notGranted = perms.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
-        if (notGranted.isNotEmpty()) requestPerms.launch(notGranted.toTypedArray())
-    }
-
-    private fun startVoiceRecognition() {
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
-        }
-        try { speechLauncher.launch(intent) } catch (e: Exception) { logUser("STT не работает") }
-    }
-
-    private fun setupCallListener() {
-        val tm = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
-            tm.listen(object : PhoneStateListener() {
-                override fun onCallStateChanged(state: Int, phoneNumber: String?) {
-                    if (state == TelephonyManager.CALL_STATE_OFFHOOK) { isCalling = true; callStartTime = System.currentTimeMillis() }
-                    else if (state == TelephonyManager.CALL_STATE_IDLE && isCalling) {
-                        isCalling = false
-                        if (System.currentTimeMillis() - callStartTime < 3000) reply("Звонок отменен")
-                    }
-                }
-            }, PhoneStateListener.LISTEN_CALL_STATE)
-        }
+    private fun callNumber(number: String) {
+        try { startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:$number"))); reply("Соединяю...") } 
+        catch (e: SecurityException) { reply("Нет разрешения") }
     }
 
     private fun findContactNumber(name: String): String? {
@@ -378,10 +293,105 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun openApp(name: String): Boolean {
-        val pkg = appsMap[name] ?: return false
-        val intent = packageManager.getLaunchIntentForPackage(pkg)
-        if (intent != null) { intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(intent); return true }
-        return false
+        val pm = packageManager
+        val apps = pm.getInstalledApplications(0)
+        val target = apps.firstOrNull {
+            pm.getApplicationLabel(it).toString().lowercase().contains(name.lowercase())
+        } ?: return false
+        val intent = pm.getLaunchIntentForPackage(target.packageName) ?: return false
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        startActivity(intent)
+        return true
+    }
+
+    private fun askChatGPT(prompt: String) {
+        executor.execute {
+            try {
+                val json = JSONObject().apply {
+                    put("model", "gpt-4o-mini")
+                    put("messages", JSONArray().put(JSONObject().apply {
+                        put("role", "user"); put("content", prompt)
+                    }))
+                }
+                val body = json.toString().toRequestBody("application/json".toMediaType())
+                val request = Request.Builder()
+                    .url("https://api.proxyapi.ru/openai/v1/chat/completions")
+                    .addHeader("Authorization", "Bearer $apiKey")
+                    .post(body)
+                    .build()
+                client.newCall(request).execute().use { response ->
+                    val resBody = response.body?.string()
+                    if (response.isSuccessful && resBody != null) {
+                        val answer = JSONObject(resBody).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
+                        runOnUiThread { reply(answer) }
+                    } else {
+                        runOnUiThread { reply("Ошибка ИИ: ${response.code}") }
+                    }
+                }
+            } catch (e: Exception) { runOnUiThread { reply("Ошибка сети.") } }
+        }
+    }
+
+    private fun logUser(text: String) { runOnUiThread { addBubble(text, true) } }
+    private fun reply(text: String) {
+        runOnUiThread { addBubble(text, false) }
+        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "j")
+    }
+
+    private fun addBubble(text: String, isUser: Boolean) {
+        val tv = TextView(this)
+        val spannable = SpannableString(text)
+        spannable.setSpan(ForegroundColorSpan(Color.WHITE), 0, text.length, 0)
+        if (isUser) tv.setBackgroundColor(Color.parseColor("#2A2A35"))
+        else {
+            val drawable = GradientDrawable().apply {
+                setColor(Color.parseColor("#1C1C26")); cornerRadius = 24f
+                setStroke(2, Color.parseColor("#5B5BFF"))
+            }
+            tv.background = drawable
+        }
+        tv.text = spannable
+        tv.textSize = 15f
+        tv.setPadding(32, 24, 32, 24)
+        val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        params.setMargins(if (isUser) 64 else 0, 8, if (isUser) 0 else 64, 8)
+        tv.layoutParams = params
+        logContainer.addView(tv)
+        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+    }
+
+    private fun requestAllPermissions() {
+        val perms = mutableListOf(
+            Manifest.permission.RECORD_AUDIO, Manifest.permission.CALL_PHONE,
+            Manifest.permission.READ_CONTACTS, Manifest.permission.SEND_SMS,
+            Manifest.permission.READ_PHONE_STATE, Manifest.permission.POST_NOTIFICATIONS,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        )
+        val notGranted = perms.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+        if (notGranted.isNotEmpty()) requestPerms.launch(notGranted.toTypedArray())
+    }
+
+    private fun startVoiceRecognition() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+        }
+        try { speechLauncher.launch(intent) } catch (e: Exception) { }
+    }
+
+    private fun setupCallListener() {
+        val tm = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+            tm.listen(object : PhoneStateListener() {
+                override fun onCallStateChanged(state: Int, phoneNumber: String?) {
+                    if (state == TelephonyManager.CALL_STATE_OFFHOOK) { isCalling = true; callStartTime = System.currentTimeMillis() }
+                    else if (state == TelephonyManager.CALL_STATE_IDLE && isCalling) {
+                        isCalling = false
+                        if (System.currentTimeMillis() - callStartTime < 3000) reply("Звонок отменен")
+                    }
+                }
+            }, PhoneStateListener.LISTEN_CALL_STATE)
+        }
     }
 
     override fun onInit(status: Int) { if (status == TextToSpeech.SUCCESS) tts?.language = Locale("ru", "RU") }
