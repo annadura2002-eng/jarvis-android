@@ -6,14 +6,16 @@ import android.content.*
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.location.LocationManager
+import android.media.MediaRecorder
 import android.net.Uri
 import android.os.*
+import android.provider.AlarmClock
 import android.provider.ContactsContract
 import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.text.Html
 import android.text.SpannableString
 import android.text.style.ForegroundColorSpan
 import android.view.View
@@ -31,6 +33,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.net.URL
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -58,6 +62,9 @@ class MainActivity : AppCompatActivity() {
     private var selectedVoice = "nova"
     private var isBubbleRunning = false
     private var skeletonView: View? = null
+    private var isCallRecording = false
+    private var mediaRecorder: MediaRecorder? = null
+    private var recordFile: File? = null
 
     private val ADMIN_EMAIL = "russkietop4ik@gmail.com"
     private val ADMIN_SECRET_KEY = "sk-a7KHDbwMldwXfWer96w2LrYd5JWzFvxG"
@@ -95,7 +102,6 @@ class MainActivity : AppCompatActivity() {
         val btnMenu = findViewById<ImageButton>(R.id.btnMenu)
         val btnSaveKey = findViewById<Button>(R.id.btnSaveKey)
 
-        // Устанавливаем кастомный шрифт для заголовка
         try { toolbarTitle.typeface = ResourcesCompat.getFont(this, R.font.manrope_bold) } catch(e: Exception){}
 
         val prefs = getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE)
@@ -117,6 +123,7 @@ class MainActivity : AppCompatActivity() {
 
         requestAllPermissions()
         setupSpeechRecognizer()
+        try { setupCallListener() } catch (e: Exception) {}
         
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
@@ -147,6 +154,37 @@ class MainActivity : AppCompatActivity() {
         }
         voiceButton.setOnClickListener { showBeautifulVoiceInput() }
         btnMenu.setOnClickListener { showBottomSheetMenu() }
+
+        // ПРОВЕРКА ОБНОВЛЕНИЙ
+        checkForUpdates()
+    }
+
+    private fun checkForUpdates() {
+        executor.execute {
+            try {
+                val url = "https://raw.githubusercontent.com/annadura2002-eng/jarvis-android/main/version.json"
+                val response = client.newCall(Request.Builder().url(url).build()).execute()
+                if (response.isSuccessful) {
+                    val json = JSONObject(response.body!!.string())
+                    val latestVersion = json.getInt("latest_version")
+                    val updateUrl = json.getString("update_url")
+                    
+                    if (latestVersion > BuildConfig.VERSION_CODE) {
+                        runOnUiThread { showUpdateDialog(updateUrl) }
+                    }
+                }
+            } catch (e: Exception) {}
+        }
+    }
+
+    private fun showUpdateDialog(url: String) {
+        val dialog = Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+        dialog.setContentView(R.layout.dialog_update)
+        dialog.setCancelable(false)
+        dialog.findViewById<Button>(R.id.btnUpdate).setOnClickListener {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }
+        dialog.show()
     }
 
     private fun showSkeletonLoader() {
@@ -154,23 +192,16 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(32, 24, 32, 24)
             setBackgroundColor(Color.parseColor("#1E1E28"))
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                setMargins(0, 8, 200, 8)
-            }
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(0, 8, 200, 8) }
         }
-        
         for (i in 0..2) {
             val line = View(this).apply {
-                layoutParams = LinearLayout.LayoutParams(
-                    if (i == 2) 200 else LinearLayout.LayoutParams.MATCH_PARENT, 
-                    20
-                ).apply { setMargins(0, 8, 0, 0) }
+                layoutParams = LinearLayout.LayoutParams(if (i == 2) 200 else LinearLayout.LayoutParams.MATCH_PARENT, 20).apply { setMargins(0, 8, 0, 0) }
                 setBackgroundColor(Color.parseColor("#2A2A35"))
                 startAnimation(AnimationUtils.loadAnimation(this@MainActivity, R.anim.pulse_alpha))
             }
             skeletonLayout.addView(line)
         }
-        
         logContainer.addView(skeletonLayout)
         scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
         skeletonView = skeletonLayout
@@ -185,7 +216,6 @@ class MainActivity : AppCompatActivity() {
         val bottomSheetDialog = BottomSheetDialog(this, R.style.Theme_Jarvis)
         val view = layoutInflater.inflate(R.layout.dialog_menu, null)
         bottomSheetDialog.setContentView(view)
-        
         bottomSheetDialog.setOnShowListener {
             val bottomSheet = bottomSheetDialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
             bottomSheet?.setBackgroundColor(Color.TRANSPARENT)
@@ -194,20 +224,53 @@ class MainActivity : AppCompatActivity() {
         val tvBubbleStatus = view.findViewById<TextView>(R.id.tvBubbleStatus)
         if (isBubbleRunning) tvBubbleStatus.text = "🫧 Выключить пузырь" else tvBubbleStatus.text = "🫧 Включить пузырь"
 
-        view.findViewById<LinearLayout>(R.id.btnMenuCommands).setOnClickListener {
-            bottomSheetDialog.dismiss(); showCommandsList()
-        }
-        view.findViewById<LinearLayout>(R.id.btnMenuVoice).setOnClickListener {
-            bottomSheetDialog.dismiss(); showVoiceSettingsDialog()
-        }
-        view.findViewById<LinearLayout>(R.id.btnMenuBubble).setOnClickListener {
-            bottomSheetDialog.dismiss(); toggleBubble()
-        }
+        view.findViewById<LinearLayout>(R.id.btnMenuCommands).setOnClickListener { bottomSheetDialog.dismiss(); showCommandsList() }
+        view.findViewById<LinearLayout>(R.id.btnMenuSecrets).setOnClickListener { bottomSheetDialog.dismiss(); showSecretsDialog() }
+        view.findViewById<LinearLayout>(R.id.btnMenuVoice).setOnClickListener { bottomSheetDialog.dismiss(); showVoiceSettingsDialog() }
+        view.findViewById<LinearLayout>(R.id.btnMenuBubble).setOnClickListener { bottomSheetDialog.dismiss(); toggleBubble() }
         view.findViewById<LinearLayout>(R.id.btnMenuLogout).setOnClickListener {
             bottomSheetDialog.dismiss(); FirebaseAuth.getInstance().signOut()
             startActivity(Intent(this, LoginActivity::class.java)); finish()
         }
         bottomSheetDialog.show()
+    }
+
+    private fun showSecretsDialog() {
+        val dialog = Dialog(this, R.style.Theme_Jarvis)
+        val view = layoutInflater.inflate(R.layout.dialog_secrets, null)
+        dialog.setContentView(view)
+
+        val tvList = view.findViewById<TextView>(R.id.tvSecretsList)
+        if (customCommands.isEmpty()) {
+            tvList.text = "Список пуст. Добавьте первую команду!"
+        } else {
+            val sb = StringBuilder()
+            for ((k, v) in customCommands) sb.append("🔑 Слово: ").append(k).append("\n➡️ Действие: ").append(v).append("\n\n")
+            tvList.text = sb.toString()
+        }
+
+        view.findViewById<Button>(R.id.btnAddSecret).setOnClickListener { dialog.dismiss(); addSecretCommandDialog() }
+        dialog.show()
+    }
+
+    private fun addSecretCommandDialog() {
+        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 32, 48, 32) }
+        val inputKey = EditText(this).apply { hint = "Секретное слово (например: огурец)" }
+        val inputAction = EditText(this).apply { hint = "Что сделать (например: открой телеграм)" }
+        layout.addView(inputKey); layout.addView(inputAction)
+
+        AlertDialog.Builder(this)
+            .setTitle("Новая секретная команда")
+            .setView(layout)
+            .setPositiveButton("Сохранить") { _, _ ->
+                val k = inputKey.text.toString().lowercase().trim()
+                val a = inputAction.text.toString().lowercase().trim()
+                if (k.isNotEmpty() && a.isNotEmpty()) {
+                    customCommands[k] = a
+                    saveCustomCommands()
+                    reply("Секретная команда '$k' добавлена!")
+                }
+            }.setNegativeButton("Отмена", null).show()
     }
 
     private fun showCommandsList() {
@@ -305,8 +368,57 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
+    private fun startCallRecording() {
+        try {
+            recordFile = File(getExternalFilesDir(null), "call_record_${System.currentTimeMillis()}.m4a")
+            mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(this) else MediaRecorder()
+            mediaRecorder?.apply {
+                setAudioSource(MediaRecorder.AudioSource.MIC)
+                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                setOutputFile(recordFile?.absolutePath)
+                prepare()
+                start()
+            }
+        } catch (e: Exception) { e.printStackTrace() }
+    }
+
+    private fun stopCallRecording() {
+        try {
+            mediaRecorder?.stop()
+            mediaRecorder?.release()
+            mediaRecorder = null
+            if (recordFile?.exists() == true) reply("Звонок записан: ${recordFile?.name}")
+        } catch (e: Exception) { e.printStackTrace() }
+    }
+
+    private fun setupCallListener() {
+        val tm = getSystemService(Context.TELEPHONY_SERVICE) as android.telephony.TelephonyManager
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+            tm.listen(object : android.telephony.PhoneStateListener() {
+                override fun onCallStateChanged(state: Int, phoneNumber: String?) {
+                    if (state == android.telephony.TelephonyManager.CALL_STATE_OFFHOOK) {
+                        if (isCallRecording) startCallRecording()
+                    } else if (state == android.telephony.TelephonyManager.CALL_STATE_IDLE) {
+                        if (isCallRecording) {
+                            stopCallRecording()
+                            isCallRecording = false
+                        }
+                    }
+                }
+            }, android.telephony.PhoneStateListener.LISTEN_CALL_STATE)
+        }
+    }
+
     private fun handleCommand(raw: String) {
         var cmd = raw.lowercase(Locale.ROOT).trim()
+        
+        if (cmd == "стоп" || cmd == "stop" || cmd == "замолчи") {
+            neuralTTS.stop()
+            Toast.makeText(this, "Остановлено", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         logUser(raw)
         val access = JarvisAccessibilityService.instance
 
@@ -316,6 +428,112 @@ class MainActivity : AppCompatActivity() {
                 val action = customCommands[secretWord]!!
                 reply("Выполняю секретную команду: $action"); cmd = action
             } else { reply("Секретная команда '$secretWord' не найдена."); return }
+        }
+
+        if (cmd.startsWith("смени имя на ")) {
+            assistantName = cmd.replace("смени имя на ", "").trim().replaceFirstChar { it.uppercase() }
+            getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE).edit().putString("assistant_name", assistantName).apply()
+            toolbarTitle.text = assistantName
+            stopService(Intent(this, VoiceService::class.java))
+            val serviceIntent = Intent(this, VoiceService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
+            reply("Теперь меня зовут $assistantName")
+            return
+        }
+
+        if (cmd.contains("будильник") || cmd.contains("alarm")) {
+            val regex = Regex("(\\d{1,2})[:. ](\\d{2})")
+            val match = regex.find(cmd)
+            if (match != null) {
+                val h = match.groupValues[1].toIntOrNull() ?: 7
+                val m = match.groupValues[2].toIntOrNull() ?: 0
+                val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
+                    putExtra(AlarmClock.EXTRA_HOUR, h)
+                    putExtra(AlarmClock.EXTRA_MINUTES, m)
+                    putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+                }
+                startActivity(intent)
+                reply("Будильник установлен на $h:$m")
+            } else reply("Скажите: будильник на 7:30")
+            return
+        }
+
+        if (cmd.startsWith("напиши ")) {
+            val parts = cmd.substringAfter("напиши ").trim().split(" ", limit = 2)
+            if (parts.size == 2) {
+                val contactName = parts[0]
+                val messageText = parts[1]
+                val num = findContactNumber(contactName)
+                if (num != null) {
+                    val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$num"))
+                    intent.putExtra("sms_body", messageText)
+                    startActivity(intent)
+                    reply("Открываю СМС для $contactName")
+                } else reply("Контакт $contactName не найден")
+            } else reply("Скажите: напиши [имя] [текст]")
+            return
+        }
+
+        if (cmd.contains("запиши звонок") || cmd.contains("запись звонка")) {
+            isCallRecording = true
+            reply("При следующем звонке начну запись.")
+            return
+        }
+
+        if (cmd.contains("маршрут до ") || cmd.contains("как доехать до ") || cmd.contains("как добраться до ")) {
+            val place = cmd.replace("маршрут до ", "").replace("как доехать до ", "").replace("как добраться до ", "").trim()
+            if (place.isNotEmpty()) {
+                reply("Строю маршрут до $place...")
+                executor.execute {
+                    val lat = getCurrentLatitude()
+                    val lon = getCurrentLongitude()
+                    runOnUiThread {
+                        val url = if (lat != null && lon != null) {
+                            "https://www.google.com/maps/dir/?api=1&origin=$lat,$lon&destination=${Uri.encode(place)}"
+                        } else {
+                            "https://www.google.com/maps/search/?api=1&query=${Uri.encode(place)}"
+                        }
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    }
+                }
+            } else reply("Скажите: маршрут до (адрес)")
+            return
+        }
+
+        if (cmd.contains("погода")) {
+            val city = cmd.replace("погода", "").replace("в", "").trim().ifEmpty { "москва" }
+            reply("Смотрю погоду в $city...")
+            executor.execute {
+                val weatherInfo = getWeather(city)
+                runOnUiThread {
+                    if (weatherInfo != null) reply(weatherInfo) else reply("Не удалось узнать погоду")
+                }
+            }
+            return
+        }
+
+        if (cmd.startsWith("найди в ютубе ") || cmd.startsWith("найди на ютубе ")) {
+            val query = cmd.replace("найди в ютубе ", "").replace("найди на ютубе ", "").replace(" ", "+")
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=$query")))
+            reply("Ищу в ютубе: $query")
+            return
+        }
+
+        if (cmd.startsWith("найди в тик токе ") || cmd.startsWith("найди в тиктоке ")) {
+            val query = cmd.replace("найди в тик токе ", "").replace("найди в тиктоке ", "").replace(" ", "+")
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.tiktok.com/search?q=$query"))
+            try { startActivity(intent) } catch (e: Exception) {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("snssdk1233://search?keyword=$query")))
+            }
+            reply("Ищу в TikTok: $query")
+            return
+        }
+
+        if (cmd.startsWith("загугли ") || cmd.startsWith("найди в интернете ")) {
+            val query = cmd.replace("загугли ", "").replace("найди в интернете ", "").replace(" ", "+")
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=$query")))
+            reply("Ищу в Google: $query")
+            return
         }
 
         if (cmd.contains("нажми ") || cmd.contains("сделай ")) {
@@ -364,11 +582,52 @@ class MainActivity : AppCompatActivity() {
         if (apiKey.isNotEmpty()) askChatGPT(raw) else reply("Для ИИ нужен ключ!")
     }
 
+    private fun getCurrentLatitude(): Double? {
+        val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        try {
+            val loc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER) ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            return loc?.latitude
+        } catch (e: SecurityException) { return null }
+    }
+
+    private fun getCurrentLongitude(): Double? {
+        val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        try {
+            val loc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER) ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            return loc?.longitude
+        } catch (e: SecurityException) { return null }
+    }
+
+    private fun getWeather(city: String): String? {
+        return try {
+            val geoUrl = "https://geocoding-api.open-meteo.com/v1/search?name=${Uri.encode(city)}&count=1&language=ru"
+            val geoJson = JSONObject(URL(geoUrl).readText())
+            val results = geoJson.optJSONArray("results") ?: return null
+            if (results.length() == 0) return null
+            val r = results.getJSONObject(0)
+            val lat = r.getDouble("latitude")
+            val lon = r.getDouble("longitude")
+            val name = r.optString("name", city)
+            
+            val wUrl = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code"
+            val wJson = JSONObject(URL(wUrl).readText())
+            val cur = wJson.getJSONObject("current")
+            val temp = cur.getDouble("temperature_2m")
+            val feels = cur.getDouble("apparent_temperature")
+            val hum = cur.getInt("relative_humidity_2m")
+            
+            "В городе $name сейчас ${"%.0f".format(temp)} градусов. Ощущается как ${"%.0f".format(feels)}. Влажность $hum%."
+        } catch (e: Exception) { null }
+    }
+
     private fun askAiForButton(prompt: String): String? {
         try {
             val json = JSONObject().apply {
                 put("model", "gpt-4o-mini")
-                put("messages", JSONArray().put(JSONObject().apply { put("role", "user"); put("content", prompt) }))
+                put("messages", JSONArray().apply { 
+                    put(JSONObject().apply { put("role", "system"); put("content", "Ты - голосовой ассистент. Сегодня ${java.text.SimpleDateFormat("d MMMM yyyy", Locale("ru")).format(java.util.Date())}.") })
+                    put(JSONObject().apply { put("role", "user"); put("content", prompt) })
+                })
                 put("max_tokens", 20)
             }
             val body = json.toString().toRequestBody("application/json".toMediaType())
@@ -389,30 +648,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ОБНОВЛЕННЫЙ ПОИСК ПРИЛОЖЕНИЙ (С ТРАНСЛИТОМ)
     private fun openAppUniversal(name: String): Boolean {
         var search = name.lowercase(Locale.ROOT).trim()
-        
-        // 1. Жесткие синонимы
-        val translitMap = mapOf(
-            "ютуб" to "youtube", "тг" to "telegram", "вк" to "vk", "вотсап" to "whatsapp",
-            "инста" to "instagram", "тикток" to "tiktok", "телега" to "telegram",
-            "телеграм" to "telegram", "вконтакте" to "vk", "вацап" to "whatsapp"
-        )
+        val translitMap = mapOf("ютуб" to "youtube", "тг" to "telegram", "вк" to "vk", "вотсап" to "whatsapp", "инста" to "instagram", "тикток" to "tiktok")
         if (translitMap.containsKey(search)) search = translitMap[search]!!
-
-        // 2. Точное совпадение
         var pkg = installedAppsMap[search]
-        
-        // 3. Частичное совпадение
         if (pkg == null) pkg = installedAppsMap.entries.firstOrNull { it.key.contains(search) }?.value
-        
-        // 4. Умный транслит (если написали русскими буквами, а приложение на английском)
         if (pkg == null) {
             val latinSearch = Translit.toLatin(search)
             pkg = installedAppsMap[latinSearch] ?: installedAppsMap.entries.firstOrNull { it.key.contains(latinSearch) }?.value
         }
-        
         if (pkg != null) {
             val intent = packageManager.getLaunchIntentForPackage(pkg)
             if (intent != null) { intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(intent); return true }
@@ -445,17 +690,17 @@ class MainActivity : AppCompatActivity() {
             try {
                 val json = JSONObject().apply {
                     put("model", "gpt-4o-mini")
-                    put("messages", JSONArray().put(JSONObject().apply { put("role", "user"); put("content", prompt) }))
+                    put("messages", JSONArray().apply { 
+                        put(JSONObject().apply { put("role", "system"); put("content", "Ты - голосовой ассистент. Сегодня ${java.text.SimpleDateFormat("d MMMM yyyy", Locale("ru")).format(java.util.Date())}. Отвечай кратко.") })
+                        put(JSONObject().apply { put("role", "user"); put("content", prompt) })
+                    })
                 }
                 val body = json.toString().toRequestBody("application/json".toMediaType())
                 val request = Request.Builder().url("https://api.proxyapi.ru/openai/v1/chat/completions").addHeader("Authorization", "Bearer $apiKey").post(body).build()
                 client.newCall(request).execute().use { response ->
                     if (response.isSuccessful) {
                         val answer = JSONObject(response.body!!.string()).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
-                        runOnUiThread { 
-                            hideSkeletonLoader()
-                            animateBotReply(answer) 
-                        }
+                        runOnUiThread { hideSkeletonLoader(); animateBotReply(answer) }
                     } else runOnUiThread { hideSkeletonLoader(); reply("Ошибка ИИ: ${response.code}") }
                 }
             } catch (e: Exception) { runOnUiThread { hideSkeletonLoader(); reply("Ошибка сети.") } }
@@ -477,19 +722,20 @@ class MainActivity : AppCompatActivity() {
         val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         params.setMargins(0, 8, 64, 8); tv.layoutParams = params
         logContainer.addView(tv); scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-        
-        neuralTTS.speak(fullText, selectedVoice)
 
-        var index = 0
-        val runnable = object : Runnable {
-            override fun run() {
-                if (index <= fullText.length) {
-                    tv.text = fullText.substring(0, index); index++; scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    uiHandler.postDelayed(this, 40)
+        neuralTTS.speak(fullText, selectedVoice) {
+            var index = 0
+            val runnable = object : Runnable {
+                override fun run() {
+                    if (index <= fullText.length) {
+                        tv.text = fullText.substring(0, index); index++
+                        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                        uiHandler.postDelayed(this, 50)
+                    }
                 }
             }
+            uiHandler.post(runnable)
         }
-        uiHandler.postDelayed(runnable, 300)
     }
 
     private fun logUser(text: String) { runOnUiThread { addBubble(text, true) } }
@@ -524,7 +770,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestAllPermissions() {
-        val perms = mutableListOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CALL_PHONE, Manifest.permission.READ_CONTACTS, Manifest.permission.SEND_SMS, Manifest.permission.READ_PHONE_STATE, Manifest.permission.POST_NOTIFICATIONS)
+        val perms = mutableListOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CALL_PHONE, Manifest.permission.READ_CONTACTS, Manifest.permission.SEND_SMS, Manifest.permission.READ_PHONE_STATE, Manifest.permission.POST_NOTIFICATIONS, Manifest.permission.ACCESS_FINE_LOCATION)
         val notGranted = perms.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
         if (notGranted.isNotEmpty()) requestPerms.launch(notGranted.toTypedArray())
     }
