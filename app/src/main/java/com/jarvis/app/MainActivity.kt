@@ -16,8 +16,8 @@ import android.speech.SpeechRecognizer
 import android.text.Html
 import android.text.SpannableString
 import android.text.style.ForegroundColorSpan
-import android.view.animation.AnimationUtils
 import android.view.View
+import android.view.animation.AnimationUtils
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -95,7 +95,6 @@ class MainActivity : AppCompatActivity() {
         val btnMenu = findViewById<ImageButton>(R.id.btnMenu)
         val btnSaveKey = findViewById<Button>(R.id.btnSaveKey)
 
-        // Устанавливаем шрифт для заголовка
         toolbarTitle.typeface = ResourcesCompat.getFont(this, R.font.manrope_bold)
 
         val prefs = getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE)
@@ -445,10 +444,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun animateBotReply(fullText: String) {
         val tv = TextView(this)
-        tv.typeface = ResourcesCompat.getFont(this, R.font.manrope_regular) // Применяем шрифт
+        tv.typeface = ResourcesCompat.getFont(this, R.font.manrope_regular)
         tv.textSize = 15f; tv.setPadding(32, 24, 32, 24); tv.setTextColor(Color.WHITE)
         
-        // Убрали stroke (рамку), оставили чистый градиент
         val drawable = GradientDrawable().apply {
             colors = intArrayOf(Color.parseColor("#2A2A35"), Color.parseColor("#1E1E28"))
             gradientType = GradientDrawable.LINEAR_GRADIENT
@@ -479,7 +477,7 @@ class MainActivity : AppCompatActivity() {
     
     private fun addBubble(text: String, isUser: Boolean) {
         val tv = TextView(this)
-        tv.typeface = ResourcesCompat.getFont(this, R.font.manrope_regular) // Применяем шрифт
+        tv.typeface = ResourcesCompat.getFont(this, R.font.manrope_regular)
         tv.setTextColor(Color.WHITE)
         val spannable = SpannableString(text)
         spannable.setSpan(ForegroundColorSpan(Color.WHITE), 0, text.length, 0)
@@ -487,7 +485,6 @@ class MainActivity : AppCompatActivity() {
         if (isUser) {
             tv.setBackgroundColor(Color.parseColor("#2A2A35"))
         } else {
-            // Убрали stroke
             val drawable = GradientDrawable().apply {
                 colors = intArrayOf(Color.parseColor("#2A2A35"), Color.parseColor("#1E1E28"))
                 gradientType = GradientDrawable.LINEAR_GRADIENT

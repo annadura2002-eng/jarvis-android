@@ -1,15 +1,22 @@
 package com.jarvis.app
 
 import android.app.Service
-import android.content.Intent
 import android.content.Context
-import android.view.WindowManager
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
-import android.view.*
-import android.widget.*
+import android.view.Gravity
+import android.view.MotionEvent
+import android.view.View
+import android.view.WindowManager
+import android.widget.Button
+import android.widget.EditText
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
+import kotlin.math.abs
 
 class FloatingBubbleService : Service() {
 
@@ -22,9 +29,8 @@ class FloatingBubbleService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        windowManager = getSystemService(WINDOW_SERVICE) as WINDOW_SERVICE
+        windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         
-        // Создаем шар
         val bubble = ImageView(this)
         bubble.setImageResource(android.R.drawable.ic_btn_speak_now)
         bubble.setColorFilter(Color.parseColor("#2DD4BF"))
@@ -59,8 +65,14 @@ class FloatingBubbleService : Service() {
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
-                        if (Math.abs(event.rawX - initialTouchX) < 10 && Math.abs(event.rawY - initialTouchY) < 10) {
-                            showMiniChat() // Открываем мини-чат
+                        if (abs(event.rawX - initialTouchX) < 10 && abs(event.rawY - initialTouchY) < 10) {
+                            if (isChatOpen) {
+                                chatView?.let { windowManager.removeView(it) }
+                                chatView = null
+                                isChatOpen = false
+                            } else {
+                                showMiniChat()
+                            }
                         }
                         return true
                     }
@@ -79,12 +91,12 @@ class FloatingBubbleService : Service() {
 
         val chatLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#E61C1C1C"))
+            setBackgroundColor(Color.parseColor("#F21C1C1C"))
             setPadding(32, 32, 32, 32)
         }
         
         val title = TextView(this).apply {
-            text = "Jarvis"
+            text = "Jarvis AI"
             setTextColor(Color.parseColor("#2DD4BF"))
             textSize = 18f
             setPadding(0, 0, 0, 16)
@@ -99,13 +111,12 @@ class FloatingBubbleService : Service() {
         }
         
         val btnSend = Button(this).apply {
-            text = "Спросить ИИ"
+            text = "Отправить"
             setBackgroundColor(Color.parseColor("#2DD4BF"))
             setOnClickListener {
                 val question = input.text.toString()
                 if (question.isNotEmpty()) {
-                    input.setText("Думаю...")
-                    // Отправляем запрос в ИИ (через BroadcastReceiver в MainActivity)
+                    input.setText("")
                     val intent = Intent("MINI_CHAT_COMMAND")
                     intent.putExtra("command", question)
                     sendBroadcast(intent)
