@@ -269,7 +269,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         executor.execute {
             try {
                 val json = JSONObject().apply {
-                    put("model", "gpt-3.5-turbo")
+                    put("model", "gpt-4o-mini")
                     put("messages", JSONArray().put(JSONObject().apply {
                         put("role", "user"); put("content", prompt)
                     }))
@@ -287,7 +287,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         val answer = JSONObject(resBody).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
                         runOnUiThread { reply(answer) }
                     } else {
-                        runOnUiThread { reply("Ошибка ИИ. Проверьте ключ и баланс.") }
+                        runOnUiThread { reply("Ошибка ИИ: ${response.code}") }
                     }
                 }
             } catch (e: Exception) {
