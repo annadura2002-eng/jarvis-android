@@ -4,8 +4,6 @@ import android.app.*
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
-import android.os.Handler
-import android.os.Looper
 import androidx.core.app.NotificationCompat
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -30,7 +28,7 @@ class VoiceService : Service(), VoskListener {
         createNotificationChannel()
         val notification = NotificationCompat.Builder(this, "JarvisChannel")
             .setContentTitle("Jarvis активен")
-            .setContentText("Скажите кодовое слово...")
+            .setContentText("Слушаю микрофон...")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
@@ -38,6 +36,7 @@ class VoiceService : Service(), VoskListener {
         startForeground(1, notification)
 
         val prefs = getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE)
+        // Берем имя из настроек (в нижнем регистре)
         wakeWord = prefs.getString("assistant_name", "коля")?.lowercase() ?: "коля"
 
         initVosk()

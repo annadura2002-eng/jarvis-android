@@ -1,46 +1,35 @@
 package com.jarvis.app
 
 import android.Manifest
-import android.app.NotificationManager
+import android.app.Dialog
 import android.content.*
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
-import android.location.Location
 import android.net.Uri
-import android.os.Build
-import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
+import android.os.*
 import android.provider.ContactsContract
-import android.provider.Settings
+import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
-import android.speech.tts.TextToSpeech
-import android.telephony.PhoneStateListener
-import android.telephony.TelephonyManager
-import android.text.Html
+import android.speech.SpeechRecognizer
 import android.text.SpannableString
 import android.text.style.ForegroundColorSpan
-import android.view.animation.AnimationUtils
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationServices
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.firebase.auth.FirebaseAuth
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import java.util.concurrent.Executors
 
-class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
+class MainActivity : AppCompatActivity() {
 
     private lateinit var logContainer: LinearLayout
     private lateinit var scrollView: ScrollView
@@ -49,18 +38,19 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var apiBar: LinearLayout
     private lateinit var apiKeyField: EditText
     private lateinit var voiceButton: ImageButton
-    private var tts: TextToSpeech? = null
+    private lateinit var neuralTTS: NeuralTTS
     private val executor = Executors.newSingleThreadExecutor()
     private val client = OkHttpClient()
-    private lateinit var fusedLocationClient: FusedLocationProviderClient
     private val uiHandler = Handler(Looper.getMainLooper())
     
-    private var isCalling: Boolean = false
-    private var callStartTime: Long = 0
     private var assistantName = "Jarvis"
     private var apiKey = ""
-    private var isTyping = false
     private var installedAppsMap = mutableMapOf<String, String>()
+    private var customCommands = mutableMapOf<String, String>()
+    private lateinit var speechRecognizer: SpeechRecognizer
+    private var voiceDialog: Dialog? = null
+    private var equalizerView: EqualizerView? = null
+    private var selectedVoice = "nova"
 
     private val ADMIN_EMAIL = "russkietop4ik@gmail.com"
     private val ADMIN_SECRET_KEY = "sk-a7KHDbwMldwXfWer96w2LrYd5JWzFvxG"
@@ -73,21 +63,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private val requestPerms = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
-    private val speechLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        voiceButton.clearAnimation()
-        if (result.resultCode == RESULT_OK) {
-            val text = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-            if (!text.isNullOrEmpty()) handleCommand(text)
-        }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Устанавливаем тему
+        setTheme(R.style.Theme_Jarvis)
         setContentView(R.layout.activity_main)
-        window.statusBarColor = Color.parseColor("#0B0B0E")
         
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-
         logContainer = findViewById(R.id.logContainer)
         scrollView = findViewById(R.id.scrollView)
         inputField = findViewById(R.id.inputField)
@@ -96,32 +78,28 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         apiKeyField = findViewById(R.id.apiKeyField)
         voiceButton = findViewById(R.id.voiceButton)
         val sendButton = findViewById<ImageButton>(R.id.sendButton)
-        val btnClear = findViewById<ImageButton>(R.id.btnClear)
         val btnMenu = findViewById<ImageButton>(R.id.btnMenu)
         val btnSaveKey = findViewById<Button>(R.id.btnSaveKey)
 
-        sendButton.setBackgroundResource(R.drawable.bg_button_send_glow)
-
         val prefs = getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE)
         assistantName = prefs.getString("assistant_name", "Jarvis") ?: "Jarvis"
-        val currentUser = FirebaseAuth.getInstance().currentUser?.email ?: ""
         apiKey = prefs.getString("api_key", "") ?: ""
+        selectedVoice = prefs.getString("neural_voice", "nova") ?: "nova"
+        
+        val currentUser = FirebaseAuth.getInstance().currentUser?.email ?: ""
         if (currentUser == ADMIN_EMAIL && apiKey.isEmpty()) {
-            apiKey = ADMIN_SECRET_KEY
-            prefs.edit().putString("api_key", apiKey).apply()
+            apiKey = ADMIN_SECRET_KEY; prefs.edit().putString("api_key", apiKey).apply()
         }
         
+        neuralTTS = NeuralTTS(this, apiKey)
         apiKeyField.setText(apiKey)
         toolbarTitle.text = assistantName
-
-        // СКАНИРУЕМ ВСЕ ПРИЛОЖЕНИЯ
         scanAllApps()
+        loadCustomCommands()
 
-        tts = TextToSpeech(this, this)
         requestAllPermissions()
-        try { setupCallListener() } catch (e: Exception) { }
+        setupSpeechRecognizer()
         
-        startService(Intent(this, GeoService::class.java))
         val serviceIntent = Intent(this, VoiceService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
 
@@ -134,117 +112,154 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         btnSaveKey.setOnClickListener {
             apiKey = apiKeyField.text.toString().trim()
             prefs.edit().putString("api_key", apiKey).apply()
-            reply("Ключ сохранен!")
-            apiBar.visibility = LinearLayout.GONE
+            neuralTTS = NeuralTTS(this, apiKey)
+            reply("Ключ сохранен!"); apiBar.visibility = LinearLayout.GONE
         }
         sendButton.setOnClickListener {
             val t = inputField.text.toString().trim()
             if (t.isNotEmpty()) { inputField.text.clear(); handleCommand(t) }
         }
-        voiceButton.setOnClickListener { startVoiceRecognition() }
-        btnClear.setOnClickListener { logContainer.removeAllViews() }
-        btnMenu.setOnClickListener { showMenuDialog() }
+        voiceButton.setOnClickListener { showBeautifulVoiceInput() }
+        btnMenu.setOnClickListener { showBottomSheetMenu() }
     }
 
-    // ФУНКЦИЯ СКАНИРОВАНИЯ
-    private fun scanAllApps() {
-        val pm = packageManager
-        val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-        for (app in apps) {
-            val label = pm.getApplicationLabel(app).toString().lowercase(Locale.ROOT)
-            if (pm.getLaunchIntentForPackage(app.packageName) != null) {
-                installedAppsMap[label] = app.packageName
-            }
-        }
-    }
-
-    private fun startVoiceRecognition() {
-        val pulseAnim = AnimationUtils.loadAnimation(this, R.anim.pulse)
-        voiceButton.startAnimation(pulseAnim)
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
-        }
-        try { speechLauncher.launch(intent) } catch (e: Exception) { voiceButton.clearAnimation() }
-    }
-
-    private fun showMenuDialog() {
-        val menuLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(48, 32, 48, 32)
-        }
-        val prefs = getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE)
-        val autoReplyEnabled = prefs.getBoolean("auto_reply", false)
-
+    // Красивое меню снизу (Bottom Sheet)
+    private fun showBottomSheetMenu() {
+        val dialog = BottomSheetDialog(this, R.style.Theme_Jarvis)
+        val view = layoutInflater.inflate(android.R.layout.simple_list_item_1, null) // Заглушка, лучше создать свой layout
+        // Здесь должен быть ваш layout для меню, для примера используем AlertDialog
+        
+        val menuLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 32, 48, 32) }
+        
         val tvCommands = TextView(this).apply {
-            text = "Список команд:\n• позвони (контакт/номер)\n• открой (любое приложение)\n• прочитай экран\n• запомни дом\n\nНастройки:"
-            setTextColor(Color.WHITE); textSize = 14f
+            text = "Команды:\n• открой (приложение)\n• нажми (кнопку)\n• добавь секретную команду\n\nНастройки:"
+            setTextColor(Color.WHITE); textSize = 15f; setLineSpacing(0f, 1.2f)
         }
-        val toggleAutoReply = Switch(this).apply {
-            text = "Авто-ответчик"; isChecked = autoReplyEnabled
-            setOnCheckedChangeListener { _, isChecked ->
-                prefs.edit().putBoolean("auto_reply", isChecked).apply()
-                reply(if (isChecked) "Авто-ответ включен" else "Авто-ответ выключен")
-            }
+
+        val btnVoiceSettings = Button(this).apply {
+            text = "Выбрать нейроголос"
+            setBackgroundColor(Color.parseColor("#6C63FF")); setTextColor(Color.WHITE)
+            setOnClickListener { (parent as? android.app.Dialog)?.dismiss(); showVoiceSettingsDialog() }
         }
-        val btnChangeKey = Button(this).apply {
-            text = "Изменить ключ ИИ"; setBackgroundColor(Color.parseColor("#2A2A35")); setTextColor(Color.WHITE)
-            setOnClickListener { apiBar.visibility = LinearLayout.VISIBLE; (parent as? android.app.Dialog)?.dismiss() }
+
+        val btnClear = Button(this).apply {
+            text = "Очистить чат"
+            setBackgroundColor(Color.parseColor("#2A2A35")); setTextColor(Color.WHITE)
+            setOnClickListener { logContainer.removeAllViews(); (parent as? android.app.Dialog)?.dismiss() }
         }
+
         val btnLogout = Button(this).apply {
-            text = "Выйти из аккаунта"; setBackgroundColor(Color.parseColor("#FF5252")); setTextColor(Color.WHITE)
-            setOnClickListener {
-                FirebaseAuth.getInstance().signOut()
-                startActivity(Intent(this@MainActivity, LoginActivity::class.java)); finish()
-            }
+            text = "Выйти"; setBackgroundColor(Color.parseColor("#FF5252")); setTextColor(Color.WHITE)
+            setOnClickListener { FirebaseAuth.getInstance().signOut(); startActivity(Intent(this@MainActivity, LoginActivity::class.java)); finish() }
         }
-        menuLayout.addView(tvCommands); menuLayout.addView(toggleAutoReply); menuLayout.addView(btnChangeKey); menuLayout.addView(btnLogout)
+        
+        menuLayout.addView(tvCommands); menuLayout.addView(btnVoiceSettings); menuLayout.addView(btnClear); menuLayout.addView(btnLogout)
 
         AlertDialog.Builder(this, com.google.android.material.R.style.Theme_Material3_Dark_Dialog_Alert)
-            .setTitle("Меню и Настройки").setView(menuLayout).setPositiveButton("Закрыть", null).show()
+            .setTitle("Меню").setView(menuLayout).setPositiveButton("Закрыть", null).show()
+    }
+
+    private fun showVoiceSettingsDialog() {
+        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 32, 48, 32) }
+        val voices = arrayOf("nova (женский)", "shimmer (женский)", "alloy (нейтральный)", "onyx (мужской)", "echo (мужской)", "fable (женский)")
+        val spinner = Spinner(this)
+        spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, voices)
+        val currentIndex = voices.indexOfFirst { it.startsWith(selectedVoice) }
+        if (currentIndex != -1) spinner.setSelection(currentIndex)
+        layout.addView(spinner)
+
+        AlertDialog.Builder(this)
+            .setTitle("Выбор живого голоса (ИИ)")
+            .setView(layout)
+            .setPositiveButton("Сохранить") { _, _ ->
+                selectedVoice = spinner.selectedItem.toString().split(" ")[0]
+                getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE).edit().putString("neural_voice", selectedVoice).apply()
+                reply("Голос изменен на $selectedVoice")
+            }.setNegativeButton("Отмена", null).show()
+    }
+
+    private fun loadCustomCommands() {
+        val prefs = getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE)
+        val saved = prefs.getString("custom_commands", "") ?: ""
+        if (saved.isNotEmpty()) {
+            val items = saved.split(";;")
+            for (item in items) {
+                val parts = item.split("::")
+                if (parts.size == 2) customCommands[parts[0]] = parts[1]
+            }
+        }
+    }
+
+    private fun showBeautifulVoiceInput() {
+        voiceDialog = Dialog(this)
+        voiceDialog?.setContentView(R.layout.dialog_voice)
+        
+        equalizerView = voiceDialog?.findViewById(R.id.equalizerView)
+        val statusView = voiceDialog?.findViewById<TextView>(R.id.voiceStatus)
+
+        equalizerView?.startAnimation()
+        statusView?.text = "Слушаю..."
+
+        speechRecognizer.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+        })
+        voiceDialog?.show()
+    }
+
+    private fun setupSpeechRecognizer() {
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+        speechRecognizer.setRecognitionListener(object : RecognitionListener {
+            override fun onResults(results: Bundle?) {
+                equalizerView?.stopAnimation()
+                voiceDialog?.dismiss()
+                val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                if (!text.isNullOrEmpty()) handleCommand(text)
+            }
+            override fun onError(error: Int) { equalizerView?.stopAnimation(); voiceDialog?.dismiss() }
+            override fun onReadyForSpeech(params: Bundle?) {}
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {}
+            override fun onPartialResults(partialResults: Bundle?) {}
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+        })
     }
 
     private fun handleCommand(raw: String) {
-        val cmd = raw.lowercase(Locale.ROOT).trim()
+        var cmd = raw.lowercase(Locale.ROOT).trim()
         logUser(raw)
+        val access = JarvisAccessibilityService.instance
 
-        if (cmd.contains("запомни дом")) { saveHomeLocation(); return }
-        if (cmd.contains("прочитай экран") || cmd.contains("что на экране")) {
-            val screenText = JarvisAccessibilityService.instance?.getScreenText()
-            if (screenText.isNullOrEmpty()) reply("Экран пуст или Accessibility выключен.") else reply("На экране: $screenText")
-            return
+        for ((key, action) in customCommands) {
+            if (cmd.contains(key)) { reply("Выполняю секретную команду: $action"); cmd = action; break }
         }
-        if (cmd.startsWith("смени имя на ")) {
-            assistantName = cmd.replace("смени имя на ", "").trim().replaceFirstChar { it.uppercase() }
-            getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE).edit().putString("assistant_name", assistantName).apply()
-            reply("Теперь меня зовут $assistantName."); return
-        }
-        if (cmd.startsWith("позвони ")) {
-            val target = cmd.substringAfter(" ").trim()
-            if (target.replace(" ", "").replace("+","").all { it.isDigit() }) callNumber(target)
-            else {
-                val num = findContactNumber(target)
-                if (num != null) callNumber(num) else reply("Контакт не найден")
+
+        if (cmd.contains("нажми ") || cmd.contains("сделай ")) {
+            if (apiKey.isEmpty()) { reply("Для этого нужен ИИ-ключ!"); return }
+            reply("Анализирую экран...")
+            executor.execute {
+                val screenText = access?.getScreenText() ?: ""
+                if (screenText.isEmpty()) { runOnUiThread { reply("Служба Accessibility выключена.") }; return@execute }
+                val prompt = "На экране телефона есть текст: [$screenText]. Пользователь просит: '$cmd'. Найди кнопку, выведи ТОЛЬКО ТЕКСТ кнопки."
+                val buttonName = askAiForButton(prompt)
+                runOnUiThread {
+                    if (buttonName != null && buttonName != "NO") {
+                        val success = access?.clickByText(listOf(buttonName))
+                        if (success == true) reply("Нажал на '$buttonName'") else reply("Не нашел кнопку.")
+                    } else reply("Не понял, куда нажимать.")
+                }
             }
             return
         }
-        // ИСПОЛЬЗУЕМ КАРТУ ВСЕХ ПРИЛОЖЕНИЙ
-        if (cmd.startsWith("открой ")) {
-            val app = cmd.substringAfter(" ").trim()
-            if (openAppUniversal(app)) reply("Открываю $app") else reply("Приложение не найдено")
+
+        if (cmd.contains("открой ")) {
+            val app = cmd.substringAfter("открой ").trim().replace("приложение", "").trim()
+            if (openAppUniversal(app)) reply("Открываю $app") else reply("Не найдено")
             return
         }
-        if (cmd.contains("включи впн")) {
-            val intent = packageManager.getLaunchIntentForPackage("com.happvpn.app")
-            if (intent != null) {
-                startActivity(intent); reply("Открываю VPN...")
-                executor.execute { Thread.sleep(2500); runOnUiThread {
-                    val s = JarvisAccessibilityService.instance?.clickByText(listOf("Connect", "Подключить", "Включить"))
-                    if (s == true) reply("VPN подключен.") else reply("Кнопка не найдена.")
-                }}
-            }
-            return
-        }
+        if (cmd.contains("листни") || cmd.contains("следующее") || cmd.contains("вниз")) { access?.swipeUp(); reply("Листаю..."); return }
         if (cmd.contains("батаре")) {
             val bm = getSystemService(BATTERY_SERVICE) as android.os.BatteryManager
             reply("Заряд: ${bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)}%"); return
@@ -253,52 +268,41 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (apiKey.isNotEmpty()) askChatGPT(raw) else reply("Для ИИ нужен ключ!")
     }
 
-    // УНИВЕРСАЛЬНЫЙ ЗАПУСК
+    private fun askAiForButton(prompt: String): String? {
+        try {
+            val json = JSONObject().apply {
+                put("model", "gpt-4o-mini")
+                put("messages", JSONArray().put(JSONObject().apply { put("role", "user"); put("content", prompt) }))
+                put("max_tokens", 20)
+            }
+            val body = json.toString().toRequestBody("application/json".toMediaType())
+            val request = Request.Builder().url("https://api.proxyapi.ru/openai/v1/chat/completions").addHeader("Authorization", "Bearer $apiKey").post(body).build()
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) return JSONObject(response.body!!.string()).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
+            }
+        } catch (e: Exception) {}
+        return null
+    }
+
+    private fun scanAllApps() {
+        val pm = packageManager
+        val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+        for (app in apps) {
+            val label = pm.getApplicationLabel(app).toString().lowercase(Locale.ROOT)
+            if (pm.getLaunchIntentForPackage(app.packageName) != null) installedAppsMap[label] = app.packageName
+        }
+    }
+
     private fun openAppUniversal(name: String): Boolean {
-        val pkg = installedAppsMap[name] 
-            ?: installedAppsMap.entries.firstOrNull { it.key.contains(name) }?.value
-            ?: installedAppsMap.entries.firstOrNull { name.contains(it.key) }?.value
-        
+        var search = name.lowercase(Locale.ROOT).trim()
+        val synonyms = mapOf("ютуб" to "youtube", "тг" to "telegram", "вк" to "vk")
+        if (synonyms.containsKey(search)) search = synonyms[search]!!
+        var pkg = installedAppsMap.entries.firstOrNull { it.key.contains(search) }?.value
         if (pkg != null) {
             val intent = packageManager.getLaunchIntentForPackage(pkg)
-            if (intent != null) {
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                startActivity(intent)
-                return true
-            }
+            if (intent != null) { intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(intent); return true }
         }
         return false
-    }
-
-    private fun saveHomeLocation() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
-                if (location != null) {
-                    getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE).edit()
-                        .putString("home_lat", location.latitude.toString()).putString("home_lon", location.longitude.toString()).apply()
-                    reply("Дом запомнен! Включу Wi-Fi при возвращении.")
-                } else reply("Не удалось получить GPS.")
-            }
-        } else requestPerms.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
-    }
-
-    private fun callNumber(number: String) {
-        try { startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:$number"))); reply("Соединяю...") } catch (e: SecurityException) { reply("Нет разрешения") }
-    }
-
-    private fun findContactNumber(name: String): String? {
-        val uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
-        val cursor = contentResolver.query(uri, null, null, null, null) ?: return null
-        var found: String? = null
-        cursor.use {
-            while (it.moveToNext()) {
-                val dn = it.getString(it.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)) ?: continue
-                if (dn.lowercase().contains(name.lowercase())) {
-                    found = it.getString(it.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER)); break
-                }
-            }
-        }
-        return found
     }
 
     private fun askChatGPT(prompt: String) {
@@ -309,12 +313,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     put("messages", JSONArray().put(JSONObject().apply { put("role", "user"); put("content", prompt) }))
                 }
                 val body = json.toString().toRequestBody("application/json".toMediaType())
-                val request = Request.Builder().url("https://api.proxyapi.ru/openai/v1/chat/completions")
-                    .addHeader("Authorization", "Bearer $apiKey").post(body).build()
+                val request = Request.Builder().url("https://api.proxyapi.ru/openai/v1/chat/completions").addHeader("Authorization", "Bearer $apiKey").post(body).build()
                 client.newCall(request).execute().use { response ->
-                    val resBody = response.body?.string()
-                    if (response.isSuccessful && resBody != null) {
-                        val answer = JSONObject(resBody).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
+                    if (response.isSuccessful) {
+                        val answer = JSONObject(response.body!!.string()).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
                         runOnUiThread { animateBotReply(answer) }
                     } else runOnUiThread { reply("Ошибка ИИ: ${response.code}") }
                 }
@@ -322,34 +324,63 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
+    // НОВЫЙ ДИЗАЙН БАБЛА (Стеклянный)
     private fun animateBotReply(fullText: String) {
         val tv = TextView(this)
-        tv.textSize = 15f; tv.setPadding(32, 24, 32, 24); tv.setBackgroundResource(R.drawable.bg_bubble_ai)
-        val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-        params.setMargins(0, 8, 64, 8); tv.layoutParams = params
-        logContainer.addView(tv); scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-        tts?.speak(fullText, TextToSpeech.QUEUE_FLUSH, null, "j")
+        tv.textSize = 15f
+        tv.setPadding(32, 24, 32, 24)
+        
+        // Используем градиентный фон для текста ИИ
+        val drawable = GradientDrawable().apply {
+            colors = intArrayOf(Color.parseColor("#2A2A35"), Color.parseColor("#1E1E28"))
+            gradientType = GradientDrawable.LINEAR_GRADIENT
+            orientation = GradientDrawable.Orientation.TL_BR
+            cornerRadius = 24f
+            setStroke(1, Color.parseColor("#33FFFFFF"))
+        }
+        tv.background = drawable
 
-        var index = 0; isTyping = true
+        val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        params.setMargins(0, 8, 64, 8)
+        tv.layoutParams = params
+        logContainer.addView(tv)
+        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+        
+        neuralTTS.speak(fullText, selectedVoice)
+
+        var index = 0
         val runnable = object : Runnable {
             override fun run() {
                 if (index <= fullText.length) {
                     tv.text = fullText.substring(0, index); index++; scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
                     uiHandler.postDelayed(this, 30)
-                } else isTyping = false
+                }
             }
         }
         uiHandler.post(runnable)
     }
 
     private fun logUser(text: String) { runOnUiThread { addBubble(text, true) } }
-    private fun reply(text: String) { runOnUiThread { addBubble(text, false) }; tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "j") }
-
+    private fun reply(text: String) { runOnUiThread { addBubble(text, false) }; neuralTTS.speak(text, selectedVoice) }
+    
     private fun addBubble(text: String, isUser: Boolean) {
         val tv = TextView(this)
         val spannable = SpannableString(text)
         spannable.setSpan(ForegroundColorSpan(Color.WHITE), 0, text.length, 0)
-        if (isUser) tv.setBackgroundColor(Color.parseColor("#2A2A35")) else tv.setBackgroundResource(R.drawable.bg_bubble_ai)
+        
+        if (isUser) {
+            tv.setBackgroundColor(Color.parseColor("#2A2A35"))
+        } else {
+            val drawable = GradientDrawable().apply {
+                colors = intArrayOf(Color.parseColor("#2A2A35"), Color.parseColor("#1E1E28"))
+                gradientType = GradientDrawable.LINEAR_GRADIENT
+                orientation = GradientDrawable.Orientation.TL_BR
+                cornerRadius = 24f
+                setStroke(1, Color.parseColor("#33FFFFFF"))
+            }
+            tv.background = drawable
+        }
+        
         tv.text = spannable; tv.textSize = 15f; tv.setPadding(32, 24, 32, 24)
         val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         params.setMargins(if (isUser) 64 else 0, 8, if (isUser) 0 else 64, 8)
@@ -358,34 +389,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun requestAllPermissions() {
-        val perms = mutableListOf(
-            Manifest.permission.RECORD_AUDIO, Manifest.permission.CALL_PHONE,
-            Manifest.permission.READ_CONTACTS, Manifest.permission.SEND_SMS,
-            Manifest.permission.READ_PHONE_STATE, Manifest.permission.POST_NOTIFICATIONS,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        )
+        val perms = mutableListOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CALL_PHONE, Manifest.permission.READ_CONTACTS, Manifest.permission.SEND_SMS, Manifest.permission.READ_PHONE_STATE, Manifest.permission.POST_NOTIFICATIONS)
         val notGranted = perms.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
         if (notGranted.isNotEmpty()) requestPerms.launch(notGranted.toTypedArray())
     }
 
-    private fun setupCallListener() {
-        val tm = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
-            tm.listen(object : PhoneStateListener() {
-                override fun onCallStateChanged(state: Int, phoneNumber: String?) {
-                    if (state == TelephonyManager.CALL_STATE_OFFHOOK) { isCalling = true; callStartTime = System.currentTimeMillis() }
-                    else if (state == TelephonyManager.CALL_STATE_IDLE && isCalling) {
-                        isCalling = false
-                        if (System.currentTimeMillis() - callStartTime < 3000) reply("Звонок отменен")
-                    }
-                }
-            }, PhoneStateListener.LISTEN_CALL_STATE)
-        }
-    }
-
-    override fun onInit(status: Int) { if (status == TextToSpeech.SUCCESS) tts?.language = Locale("ru", "RU") }
-    override fun onDestroy() {
-        try { unregisterReceiver(wakeWordReceiver) } catch (e: Exception) {}
-        tts?.shutdown(); super.onDestroy()
-    }
+    override fun onDestroy() { try { unregisterReceiver(wakeWordReceiver) } catch (e: Exception) {}; super.onDestroy() }
 }
