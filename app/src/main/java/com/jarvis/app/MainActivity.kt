@@ -151,6 +151,36 @@ class MainActivity : AppCompatActivity() {
         btnMenu.setOnClickListener { showBottomSheetMenu() }
     }
 
+    private fun setJarvisAlarm(hour: Int, minute: Int) {
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(this, AlarmService::class.java)
+        val pendingIntent = PendingIntent.getService(this, 100, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+        val calendar = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, hour)
+            set(java.util.Calendar.MINUTE, minute)
+            set(java.util.Calendar.SECOND, 0)
+            if (before(java.util.Calendar.getInstance())) {
+                add(java.util.Calendar.DAY_OF_MONTH, 1)
+            }
+        }
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (alarmManager.canScheduleExactAlarms()) {
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pendingIntent)
+                } else {
+                    alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pendingIntent)
+                }
+            } else {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pendingIntent)
+            }
+            reply("Будильник установлен на ${"%02d".format(hour)}:${"%02d".format(minute)}")
+        } catch (e: Exception) {
+            reply("Ошибка установки будильника: ${e.message}")
+        }
+    }
+
     private fun showSkeletonLoader() {
         val skeletonLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -440,7 +470,7 @@ class MainActivity : AppCompatActivity() {
             reply("Звук выключен."); return
         }
 
-        // --- ТАЙМЕРЫ И НАПОМИНАНИЯ ---
+        // --- ТАЙМЕР ---
         if (cmd.contains("таймер на ")) {
             val timePart = cmd.replace("таймер на ", "").trim()
             var mins = 0
@@ -453,36 +483,23 @@ class MainActivity : AppCompatActivity() {
             } else reply("Скажите: таймер на 5 минут")
             return
         }
-        }
-        }
-        }
 
-        if (cmd.startsWith("напомни через ")) {
-            val parts = cmd.replace("напомни через ", "").split(" минут ")
-            if (parts.size == 2) {
-                val mins = parts[0].filter { it.isDigit() }.toIntOrNull() ?: 5
-                val text = parts[1]
-                val cal = Calendar.getInstance()
-                cal.add(Calendar.MINUTE, mins)
-                val intent = Intent(Intent.ACTION_INSERT).apply {
-                    data = Uri.parse("content://com.android.calendar/events")
-                    putExtra("beginTime", cal.timeInMillis)
-                    putExtra("endTime", cal.timeInMillis + 3600000)
-                    putExtra("title", text)
-                    putExtra("description", "Напоминание от Джарвиса")
-                }
-                startActivity(intent)
-                reply("Напоминание создано: $text через $mins минут.")
-            } else reply("Скажите: напомни через 10 минут выпить чай")
+        // --- БУДИЛЬНИК ---
+        if (cmd.contains("будильник") || cmd.contains("alarm")) {
+            val regex = Regex("(\\d{1,2})[:. ](\\d{2})")
+            val match = regex.find(cmd)
+            if (match != null) {
+                val h = match.groupValues[1].toIntOrNull() ?: 7
+                val m = match.groupValues[2].toIntOrNull() ?: 0
+                setJarvisAlarm(h, m)
+            } else reply("Скажите: будильник на 7:30")
             return
         }
 
         // --- БЫСТРЫЕ НАСТРОЙКИ ---
         if (cmd.contains("включи вайфай") || cmd.contains("включи wi-fi")) {
-            try {
-                startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
-                reply("Открываю настройки Wi-Fi.")
-            } catch (e: Exception) { reply("Не удалось открыть настройки.") }
+            try { startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)); reply("Открываю настройки Wi-Fi.") } 
+            catch (e: Exception) { reply("Не удалось открыть настройки.") }
             return
         }
         if (cmd.contains("включи блютуз") || cmd.contains("включи bluetooth")) {
@@ -519,7 +536,6 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // --- ОСТАЛЬНЫЕ КОМАНДЫ ---
         if (cmd.startsWith("смени имя на ")) {
             assistantName = cmd.replace("смени имя на ", "").trim().replaceFirstChar { it.uppercase() }
             getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE).edit().putString("assistant_name", assistantName).apply()
@@ -528,23 +544,6 @@ class MainActivity : AppCompatActivity() {
             val serviceIntent = Intent(this, VoiceService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
             reply("Теперь меня зовут $assistantName")
-            return
-        }
-
-        if (cmd.contains("будильник") || cmd.contains("alarm")) {
-            val regex = Regex("(\\d{1,2})[:. ](\\d{2})")
-            val match = regex.find(cmd)
-            if (match != null) {
-                val h = match.groupValues[1].toIntOrNull() ?: 7
-                val m = match.groupValues[2].toIntOrNull() ?: 0
-                val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
-                    putExtra(AlarmClock.EXTRA_HOUR, h)
-                    putExtra(AlarmClock.EXTRA_MINUTES, m)
-                    putExtra(AlarmClock.EXTRA_SKIP_UI, true)
-                }
-                startActivity(intent)
-                reply("Будильник установлен на $h:$m")
-            } else reply("Скажите: будильник на 7:30")
             return
         }
 
