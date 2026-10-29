@@ -4,12 +4,14 @@
     android:layout_height="match_parent"
     android:fillViewport="true"
     android:background="#0B0B0E">
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:gravity="center_horizontal"
         android:padding="32dp">
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -19,6 +21,7 @@
             android:textStyle="bold"
             android:layout_marginTop="40dp"
             android:layout_marginBottom="40dp"/>
+
         <EditText
             android:id="@+id/emailField"
             android:layout_width="match_parent"
@@ -30,6 +33,7 @@
             android:paddingStart="20dp"
             android:layout_marginBottom="16dp"
             android:inputType="textEmailAddress"/>
+
         <EditText
             android:id="@+id/passwordField"
             android:layout_width="match_parent"
@@ -41,6 +45,7 @@
             android:paddingStart="20dp"
             android:layout_marginBottom="24dp"
             android:inputType="textPassword"/>
+
         <Button
             android:id="@+id/btnLogin"
             android:layout_width="match_parent"
@@ -48,6 +53,7 @@
             android:text="Войти"
             android:backgroundTint="#5B5BFF"
             android:layout_marginBottom="16dp"/>
+
         <Button
             android:id="@+id/btnRegister"
             android:layout_width="match_parent"
@@ -55,26 +61,21 @@
             android:text="Зарегистрироваться"
             android:backgroundTint="#2A2A35"
             android:layout_marginBottom="24dp"/>
-        <!-- Поле для кода / подтверждения -->
-        <EditText
-            android:id="@+id/codeField"
-            android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:hint="Введите код из письма (или откройте ссылку)"
-            android:textColor="#FFFFFF"
-            android:textColorHint="#888"
-            android:background="@drawable/bg_input"
-            android:paddingStart="20dp"
-            android:layout_marginBottom="16dp"
-            android:visibility="gone"
-            android:inputType="text"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Или"
+            android:textColor="#888"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- ВОЗВРАЩАЕМ КНОПКУ GOOGLE -->
         <Button
-            android:id="@+id/btnVerify"
+            android:id="@+id/btnGoogle"
             android:layout_width="match_parent"
             android:layout_height="50dp"
-            android:text="Подтвердить"
-            android:backgroundTint="#4CAF50"
-            android:layout_marginBottom="24dp"
-            android:visibility="gone"/>
+            android:text="Войти через Google"
+            android:backgroundTint="#DB4437"
+            android:layout_marginBottom="32dp"/>
     </LinearLayout>
 </ScrollView>
