@@ -17,6 +17,7 @@ import android.text.Html
 import android.text.SpannableString
 import android.text.style.ForegroundColorSpan
 import android.view.animation.AnimationUtils
+import android.view.View
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog

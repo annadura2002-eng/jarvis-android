@@ -2,6 +2,8 @@ package com.jarvis.app
 
 import android.app.Service
 import android.content.Intent
+import android.content.Context
+import android.view.WindowManager
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
