@@ -47,8 +47,10 @@ class NeuralTTS(private val context: Context, private val apiKey: String) {
                                 mediaPlayer?.setDataSource(tempFile.absolutePath)
                                 mediaPlayer?.prepare()
                                 mediaPlayer?.start()
-                                onStart() // Запускаем печать текста, когда пошел звук
+                                onStart()
                             }
+                        } else {
+                            android.os.Handler(context.mainLooper).post { onStart() }
                         }
                     } else {
                         android.os.Handler(context.mainLooper).post { onStart() }

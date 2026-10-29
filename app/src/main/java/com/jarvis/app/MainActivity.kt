@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.location.LocationManager
+import android.media.AudioManager
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.*
@@ -18,6 +19,7 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.text.SpannableString
 import android.text.style.ForegroundColorSpan
+import android.view.KeyEvent
 import android.view.View
 import android.view.animation.AnimationUtils
 import android.widget.*
@@ -35,6 +37,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.net.URL
+import java.util.Calendar
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -65,7 +68,6 @@ class MainActivity : AppCompatActivity() {
     private var isCallRecording = false
     private var mediaRecorder: MediaRecorder? = null
     private var recordFile: File? = null
-
 
     private val wakeWordReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -108,9 +110,6 @@ class MainActivity : AppCompatActivity() {
         selectedVoice = prefs.getString("neural_voice", "nova") ?: "nova"
         isBubbleRunning = prefs.getBoolean("bubble_running", false)
         
-        val currentUser = FirebaseAuth.getInstance().currentUser?.email ?: ""
-        }
-        
         neuralTTS = NeuralTTS(this, apiKey)
         apiKeyField.setText(apiKey)
         toolbarTitle.text = assistantName
@@ -150,37 +149,6 @@ class MainActivity : AppCompatActivity() {
         }
         voiceButton.setOnClickListener { showBeautifulVoiceInput() }
         btnMenu.setOnClickListener { showBottomSheetMenu() }
-
-        // ПРОВЕРКА ОБНОВЛЕНИЙ
-        checkForUpdates()
-    }
-
-    private fun checkForUpdates() {
-        executor.execute {
-            try {
-                val url = "https://raw.githubusercontent.com/annadura2002-eng/jarvis-android/main/version.json"
-                val response = client.newCall(Request.Builder().url(url).build()).execute()
-                if (response.isSuccessful) {
-                    val json = JSONObject(response.body!!.string())
-                    val latestVersion = json.getInt("latest_version")
-                    val updateUrl = json.getString("update_url")
-                    
-                    if (latestVersion > BuildConfig.VERSION_CODE) {
-                        runOnUiThread { showUpdateDialog(updateUrl) }
-                    }
-                }
-            } catch (e: Exception) {}
-        }
-    }
-
-    private fun showUpdateDialog(url: String) {
-        val dialog = Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
-        dialog.setContentView(R.layout.dialog_update)
-        dialog.setCancelable(false)
-        dialog.findViewById<Button>(R.id.btnUpdate).setOnClickListener {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-        }
-        dialog.show()
     }
 
     private fun showSkeletonLoader() {
@@ -223,7 +191,6 @@ class MainActivity : AppCompatActivity() {
         view.findViewById<LinearLayout>(R.id.btnMenuCommands).setOnClickListener { bottomSheetDialog.dismiss(); showCommandsList() }
         view.findViewById<LinearLayout>(R.id.btnMenuSecrets).setOnClickListener { bottomSheetDialog.dismiss(); showSecretsDialog() }
         view.findViewById<LinearLayout>(R.id.btnMenuVoice).setOnClickListener { bottomSheetDialog.dismiss(); showVoiceSettingsDialog() }
-        view.findViewById<LinearLayout>(R.id.btnMenuSettings).setOnClickListener { bottomSheetDialog.dismiss(); apiBar.visibility = LinearLayout.VISIBLE }
         view.findViewById<LinearLayout>(R.id.btnMenuSettings).setOnClickListener { bottomSheetDialog.dismiss(); apiBar.visibility = LinearLayout.VISIBLE }
         view.findViewById<LinearLayout>(R.id.btnMenuBubble).setOnClickListener { bottomSheetDialog.dismiss(); toggleBubble() }
         view.findViewById<LinearLayout>(R.id.btnMenuLogout).setOnClickListener {
@@ -426,6 +393,7 @@ class MainActivity : AppCompatActivity() {
 
         logUser(raw)
         val access = JarvisAccessibilityService.instance
+        val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
 
         if (cmd.contains("секрет ")) {
             val secretWord = cmd.replace("секрет ", "").trim()
@@ -435,6 +403,120 @@ class MainActivity : AppCompatActivity() {
             } else { reply("Секретная команда '$secretWord' не найдена."); return }
         }
 
+        // --- УПРАВЛЕНИЕ МЕДИА ---
+        if (cmd.contains("пауза") || cmd.contains("поставь на паузу")) {
+            audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PAUSE))
+            audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PAUSE))
+            reply("Пауза."); return
+        }
+        if (cmd.contains("играй") || cmd.contains("продолжи музыку")) {
+            audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY))
+            audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY))
+            reply("Включаю."); return
+        }
+        if (cmd.contains("следующий трек") || cmd.contains("следующую песню")) {
+            audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_NEXT))
+            audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_NEXT))
+            reply("Следующий трек."); return
+        }
+        if (cmd.contains("предыдущий трек") || cmd.contains("предыдущую песню")) {
+            audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PREVIOUS))
+            audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PREVIOUS))
+            reply("Предыдущий трек."); return
+        }
+
+        // --- ГРОМКОСТЬ ---
+        if (cmd.contains("громкость")) {
+            val num = cmd.filter { it.isDigit() }.toIntOrNull()
+            if (num != null) {
+                val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, num * max / 100, 0)
+                reply("Громкость $num процентов.")
+            } else reply("Скажите: громкость 50")
+            return
+        }
+        if (cmd.contains("выключи звук") || cmd.contains("без звука")) {
+            audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
+            reply("Звук выключен."); return
+        }
+
+        // --- ТАЙМЕРЫ И НАПОМИНАНИЯ ---
+        if (cmd.contains("таймер на ")) {
+            val num = cmd.replace("таймер на ", "").filter { it.isDigit() }.toIntOrNull()
+            if (num != null) {
+                val intent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
+                    putExtra(AlarmClock.EXTRA_LENGTH, num * 60)
+                    putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+                }
+                startActivity(intent)
+                reply("Таймер на $num минут.")
+            } else reply("Скажите: таймер на 5 минут")
+            return
+        }
+
+        if (cmd.startsWith("напомни через ")) {
+            val parts = cmd.replace("напомни через ", "").split(" минут ")
+            if (parts.size == 2) {
+                val mins = parts[0].filter { it.isDigit() }.toIntOrNull() ?: 5
+                val text = parts[1]
+                val cal = Calendar.getInstance()
+                cal.add(Calendar.MINUTE, mins)
+                val intent = Intent(Intent.ACTION_INSERT).apply {
+                    data = Uri.parse("content://com.android.calendar/events")
+                    putExtra("beginTime", cal.timeInMillis)
+                    putExtra("endTime", cal.timeInMillis + 3600000)
+                    putExtra("title", text)
+                    putExtra("description", "Напоминание от Джарвиса")
+                }
+                startActivity(intent)
+                reply("Напоминание создано: $text через $mins минут.")
+            } else reply("Скажите: напомни через 10 минут выпить чай")
+            return
+        }
+
+        // --- БЫСТРЫЕ НАСТРОЙКИ ---
+        if (cmd.contains("включи вайфай") || cmd.contains("включи wi-fi")) {
+            try {
+                startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+                reply("Открываю настройки Wi-Fi.")
+            } catch (e: Exception) { reply("Не удалось открыть настройки.") }
+            return
+        }
+        if (cmd.contains("включи блютуз") || cmd.contains("включи bluetooth")) {
+            startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+            reply("Открываю настройки Bluetooth."); return
+        }
+
+        // --- ОТПРАВКА СООБЩЕНИЙ ---
+        if (cmd.contains("отправь в телеграм ")) {
+            val parts = cmd.replace("отправь в телеграм ", "").split(" ", limit = 2)
+            if (parts.size == 2) {
+                val contact = parts[0]
+                val message = parts[1]
+                val intent = packageManager.getLaunchIntentForPackage("org.telegram.messenger")
+                if (intent != null) {
+                    startActivity(intent); reply("Открываю телеграм...")
+                    executor.execute {
+                        Thread.sleep(2000)
+                        runOnUiThread {
+                            access?.clickByText(listOf("Search", "Поиск"))
+                            Thread.sleep(1000)
+                            access?.inputText(contact)
+                            Thread.sleep(1500)
+                            access?.clickByText(listOf(contact))
+                            Thread.sleep(1500)
+                            access?.inputText(message)
+                            Thread.sleep(500)
+                            access?.clickByText(listOf("Send", "Отправить", "➤"))
+                            reply("Сообщение отправлено!")
+                        }
+                    }
+                }
+            } else reply("Скажите: отправь в телеграм Даша привет")
+            return
+        }
+
+        // --- ОСТАЛЬНЫЕ КОМАНДЫ ---
         if (cmd.startsWith("смени имя на ")) {
             assistantName = cmd.replace("смени имя на ", "").trim().replaceFirstChar { it.uppercase() }
             getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE).edit().putString("assistant_name", assistantName).apply()
