@@ -66,8 +66,6 @@ class MainActivity : AppCompatActivity() {
     private var mediaRecorder: MediaRecorder? = null
     private var recordFile: File? = null
 
-    private val ADMIN_EMAIL = "russkietop4ik@gmail.com"
-    private val ADMIN_SECRET_KEY = "sk-a7KHDbwMldwXfWer96w2LrYd5JWzFvxG"
 
     private val wakeWordReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -111,8 +109,6 @@ class MainActivity : AppCompatActivity() {
         isBubbleRunning = prefs.getBoolean("bubble_running", false)
         
         val currentUser = FirebaseAuth.getInstance().currentUser?.email ?: ""
-        if (currentUser == ADMIN_EMAIL && apiKey.isEmpty()) {
-            apiKey = ADMIN_SECRET_KEY; prefs.edit().putString("api_key", apiKey).apply()
         }
         
         neuralTTS = NeuralTTS(this, apiKey)
