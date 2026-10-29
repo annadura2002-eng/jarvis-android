@@ -95,7 +95,8 @@ class MainActivity : AppCompatActivity() {
         val btnMenu = findViewById<ImageButton>(R.id.btnMenu)
         val btnSaveKey = findViewById<Button>(R.id.btnSaveKey)
 
-        toolbarTitle.typeface = ResourcesCompat.getFont(this, R.font.manrope_bold)
+        // Устанавливаем кастомный шрифт для заголовка
+        try { toolbarTitle.typeface = ResourcesCompat.getFont(this, R.font.manrope_bold) } catch(e: Exception){}
 
         val prefs = getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE)
         assistantName = prefs.getString("assistant_name", "Jarvis") ?: "Jarvis"
@@ -388,11 +389,30 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ОБНОВЛЕННЫЙ ПОИСК ПРИЛОЖЕНИЙ (С ТРАНСЛИТОМ)
     private fun openAppUniversal(name: String): Boolean {
         var search = name.lowercase(Locale.ROOT).trim()
-        val translitMap = mapOf("ютуб" to "youtube", "тг" to "telegram", "вк" to "vk", "вотсап" to "whatsapp", "инста" to "instagram", "тикток" to "tiktok")
+        
+        // 1. Жесткие синонимы
+        val translitMap = mapOf(
+            "ютуб" to "youtube", "тг" to "telegram", "вк" to "vk", "вотсап" to "whatsapp",
+            "инста" to "instagram", "тикток" to "tiktok", "телега" to "telegram",
+            "телеграм" to "telegram", "вконтакте" to "vk", "вацап" to "whatsapp"
+        )
         if (translitMap.containsKey(search)) search = translitMap[search]!!
-        var pkg = installedAppsMap[search] ?: installedAppsMap.entries.firstOrNull { it.key.contains(search) }?.value
+
+        // 2. Точное совпадение
+        var pkg = installedAppsMap[search]
+        
+        // 3. Частичное совпадение
+        if (pkg == null) pkg = installedAppsMap.entries.firstOrNull { it.key.contains(search) }?.value
+        
+        // 4. Умный транслит (если написали русскими буквами, а приложение на английском)
+        if (pkg == null) {
+            val latinSearch = Translit.toLatin(search)
+            pkg = installedAppsMap[latinSearch] ?: installedAppsMap.entries.firstOrNull { it.key.contains(latinSearch) }?.value
+        }
+        
         if (pkg != null) {
             val intent = packageManager.getLaunchIntentForPackage(pkg)
             if (intent != null) { intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(intent); return true }
@@ -444,7 +464,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun animateBotReply(fullText: String) {
         val tv = TextView(this)
-        tv.typeface = ResourcesCompat.getFont(this, R.font.manrope_regular)
+        try { tv.typeface = ResourcesCompat.getFont(this, R.font.manrope_regular) } catch(e: Exception){}
         tv.textSize = 15f; tv.setPadding(32, 24, 32, 24); tv.setTextColor(Color.WHITE)
         
         val drawable = GradientDrawable().apply {
@@ -477,7 +497,7 @@ class MainActivity : AppCompatActivity() {
     
     private fun addBubble(text: String, isUser: Boolean) {
         val tv = TextView(this)
-        tv.typeface = ResourcesCompat.getFont(this, R.font.manrope_regular)
+        try { tv.typeface = ResourcesCompat.getFont(this, R.font.manrope_regular) } catch(e: Exception){}
         tv.setTextColor(Color.WHITE)
         val spannable = SpannableString(text)
         spannable.setSpan(ForegroundColorSpan(Color.WHITE), 0, text.length, 0)
