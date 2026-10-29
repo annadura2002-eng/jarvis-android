@@ -10,6 +10,8 @@ import android.location.Location
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.ContactsContract
 import android.provider.Settings
 import android.speech.RecognizerIntent
@@ -19,6 +21,7 @@ import android.telephony.TelephonyManager
 import android.text.Html
 import android.text.SpannableString
 import android.text.style.ForegroundColorSpan
+import android.view.animation.AnimationUtils
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -45,15 +48,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var toolbarTitle: TextView
     private lateinit var apiBar: LinearLayout
     private lateinit var apiKeyField: EditText
+    private lateinit var voiceButton: ImageButton
     private var tts: TextToSpeech? = null
     private val executor = Executors.newSingleThreadExecutor()
     private val client = OkHttpClient()
     private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private val uiHandler = Handler(Looper.getMainLooper())
     
     private var isCalling: Boolean = false
     private var callStartTime: Long = 0
     private var assistantName = "Jarvis"
     private var apiKey = ""
+    private var isTyping = false
     
     private val ADMIN_EMAIL = "russkietop4ik@gmail.com"
     private val ADMIN_SECRET_KEY = "sk-a7KHDbwMldwXfWer96w2LrYd5JWzFvxG"
@@ -67,6 +73,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private val requestPerms = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
     private val speechLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        // Останавливаем пульсацию
+        voiceButton.clearAnimation()
+        
         if (result.resultCode == RESULT_OK) {
             val text = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
             if (!text.isNullOrEmpty()) handleCommand(text)
@@ -86,11 +95,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         toolbarTitle = findViewById(R.id.toolbarTitle)
         apiBar = findViewById(R.id.apiBar)
         apiKeyField = findViewById(R.id.apiKeyField)
+        voiceButton = findViewById(R.id.voiceButton)
         val sendButton = findViewById<ImageButton>(R.id.sendButton)
-        val voiceButton = findViewById<ImageButton>(R.id.voiceButton)
         val btnClear = findViewById<ImageButton>(R.id.btnClear)
         val btnMenu = findViewById<ImageButton>(R.id.btnMenu)
         val btnSaveKey = findViewById<Button>(R.id.btnSaveKey)
+
+        // Применяем красивый фон к кнопке отправки
+        sendButton.setBackgroundResource(R.drawable.bg_button_send_glow)
 
         val prefs = getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE)
         assistantName = prefs.getString("assistant_name", "Jarvis") ?: "Jarvis"
@@ -108,9 +120,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         requestAllPermissions()
         try { setupCallListener() } catch (e: Exception) { }
         
-        // Запуск сервиса геолокации
         startService(Intent(this, GeoService::class.java))
-
         val serviceIntent = Intent(this, VoiceService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
 
@@ -135,6 +145,20 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         btnMenu.setOnClickListener { showMenuDialog() }
     }
 
+    private fun startVoiceRecognition() {
+        // Запускаем пульсацию
+        val pulseAnim = AnimationUtils.loadAnimation(this, R.anim.pulse)
+        voiceButton.startAnimation(pulseAnim)
+
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+        }
+        try { speechLauncher.launch(intent) } catch (e: Exception) { 
+            voiceButton.clearAnimation() 
+        }
+    }
+
     private fun showMenuDialog() {
         val menuLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -145,7 +169,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val autoReplyEnabled = prefs.getBoolean("auto_reply", false)
 
         val tvCommands = TextView(this).apply {
-            text = "Список команд:\n• позвони (контакт/номер)\n• открой (приложение)\n• прочитай экран\n• сколько лет (вопрос)\n• запомни дом (гео-триггер)\n\nНастройки:"
+            text = "Список команд:\n• позвони (контакт/номер)\n• открой (приложение)\n• прочитай экран\n• запомни дом (гео-триггер)\n\nНастройки:"
             setTextColor(Color.WHITE)
             textSize = 14f
         }
@@ -196,10 +220,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val cmd = raw.lowercase(Locale.ROOT).trim()
         logUser(raw)
 
-        if (cmd.contains("запомни дом")) {
-            saveHomeLocation()
-            return
-        }
+        if (cmd.contains("запомни дом")) { saveHomeLocation(); return }
         if (cmd.contains("прочитай экран") || cmd.contains("что на экране")) {
             val screenText = JarvisAccessibilityService.instance?.getScreenText()
             if (screenText.isNullOrEmpty()) reply("На экране пусто или служба Accessibility выключена.")
@@ -214,9 +235,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         if (cmd.startsWith("позвони ")) {
             val target = cmd.substringAfter(" ").trim()
-            if (target.replace(" ", "").replace("+","").all { it.isDigit() }) {
-                callNumber(target)
-            } else {
+            if (target.replace(" ", "").replace("+","").all { it.isDigit() }) callNumber(target)
+            else {
                 val num = findContactNumber(target)
                 if (num != null) callNumber(num) else reply("Контакт не найден")
             }
@@ -247,7 +267,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
         if (apiKey.isNotEmpty()) {
-            reply("Думаю...")
+            // Если это не команда, идем в ИИ
             askChatGPT(raw)
         } else {
             reply("Для ИИ нужен ключ! Нажмите на три полоски вверху.")
@@ -263,13 +283,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         .putString("home_lon", location.longitude.toString())
                         .apply()
                     reply("Дом запомнен! Теперь приду домой — включу Wi-Fi.")
-                } else {
-                    reply("Не удалось получить GPS-координаты.")
-                }
+                } else reply("Не удалось получить GPS.")
             }
-        } else {
-            requestPerms.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
-        }
+        } else requestPerms.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
     }
 
     private fun callNumber(number: String) {
@@ -295,9 +311,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun openApp(name: String): Boolean {
         val pm = packageManager
         val apps = pm.getInstalledApplications(0)
-        val target = apps.firstOrNull {
-            pm.getApplicationLabel(it).toString().lowercase().contains(name.lowercase())
-        } ?: return false
+        val target = apps.firstOrNull { pm.getApplicationLabel(it).toString().lowercase().contains(name.lowercase()) } ?: return false
         val intent = pm.getLaunchIntentForPackage(target.packageName) ?: return false
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         startActivity(intent)
@@ -323,13 +337,48 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     val resBody = response.body?.string()
                     if (response.isSuccessful && resBody != null) {
                         val answer = JSONObject(resBody).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
-                        runOnUiThread { reply(answer) }
+                        runOnUiThread { animateBotReply(answer) }
                     } else {
                         runOnUiThread { reply("Ошибка ИИ: ${response.code}") }
                     }
                 }
             } catch (e: Exception) { runOnUiThread { reply("Ошибка сети.") } }
         }
+    }
+
+    // АНИМАЦИЯ ПЕЧАТИ ТЕКСТА
+    private fun animateBotReply(fullText: String) {
+        val tv = TextView(this)
+        val spannable = SpannableString("")
+        spannable.setSpan(ForegroundColorSpan(Color.WHITE), 0, 0, 0)
+        tv.text = spannable
+        tv.textSize = 15f
+        tv.setPadding(32, 24, 32, 24)
+        tv.setBackgroundResource(R.drawable.bg_bubble_ai)
+        
+        val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        params.setMargins(0, 8, 64, 8)
+        tv.layoutParams = params
+        logContainer.addView(tv)
+        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+
+        tts?.speak(fullText, TextToSpeech.QUEUE_FLUSH, null, "j")
+
+        var index = 0
+        isTyping = true
+        val runnable = object : Runnable {
+            override fun run() {
+                if (index <= fullText.length) {
+                    tv.text = fullText.substring(0, index)
+                    index++
+                    scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+                    uiHandler.postDelayed(this, 30) // Скорость печати
+                } else {
+                    isTyping = false
+                }
+            }
+        }
+        uiHandler.post(runnable)
     }
 
     private fun logUser(text: String) { runOnUiThread { addBubble(text, true) } }
@@ -343,13 +392,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val spannable = SpannableString(text)
         spannable.setSpan(ForegroundColorSpan(Color.WHITE), 0, text.length, 0)
         if (isUser) tv.setBackgroundColor(Color.parseColor("#2A2A35"))
-        else {
-            val drawable = GradientDrawable().apply {
-                setColor(Color.parseColor("#1C1C26")); cornerRadius = 24f
-                setStroke(2, Color.parseColor("#5B5BFF"))
-            }
-            tv.background = drawable
-        }
+        else tv.setBackgroundResource(R.drawable.bg_bubble_ai)
+        
         tv.text = spannable
         tv.textSize = 15f
         tv.setPadding(32, 24, 32, 24)
@@ -369,14 +413,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         )
         val notGranted = perms.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
         if (notGranted.isNotEmpty()) requestPerms.launch(notGranted.toTypedArray())
-    }
-
-    private fun startVoiceRecognition() {
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
-        }
-        try { speechLauncher.launch(intent) } catch (e: Exception) { }
     }
 
     private fun setupCallListener() {
