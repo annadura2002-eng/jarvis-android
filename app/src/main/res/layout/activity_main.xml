@@ -24,8 +24,7 @@
             android:text="Jarvis"
             android:textColor="#FFFFFF"
             android:textSize="22sp"
-            android:textStyle="bold"
-            android:fontFamily="sans-serif-medium"/>
+            android:textStyle="bold"/>
         <ImageButton
             android:id="@+id/btnMenu"
             android:layout_width="40dp"
@@ -50,13 +49,42 @@
         android:padding="12dp"
         android:clipToPadding="false"
         app:layout_constraintTop_toBottomOf="@id/header"
-        app:layout_constraintBottom_toTopOf="@id/bottomBar">
+        app:layout_constraintBottom_toTopOf="@id/apiBar">
         <LinearLayout
             android:id="@+id/logContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"/>
     </ScrollView>
+
+    <!-- Панель ввода ключа -->
+    <LinearLayout
+        android:id="@+id/apiBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="8dp"
+        android:background="#1A1A22"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@id/bottomBar">
+        <EditText
+            android:id="@+id/apiKeyField"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:hint="Введите API-ключ ProxyAPI"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#777"
+            android:background="@drawable/bg_input"
+            android:paddingStart="12dp"
+            android:inputType="text"/>
+        <Button
+            android:id="@+id/btnSaveKey"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:text="Сохранить"
+            android:layout_marginStart="8dp"/>
+    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/bottomBar"
@@ -73,7 +101,7 @@
             android:layout_width="0dp"
             android:layout_height="48dp"
             android:layout_weight="1"
-            android:hint="Введите команду..."
+            android:hint="Введите запрос..."
             android:textColor="#FFFFFF"
             android:textColorHint="#6B6B7A"
             android:background="@drawable/bg_input"

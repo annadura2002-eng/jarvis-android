@@ -3,6 +3,8 @@ package com.jarvis.app
 import android.Manifest
 import android.app.NotificationManager
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -24,21 +26,17 @@ import android.telephony.TelephonyManager
 import android.text.Html
 import android.text.SpannableString
 import android.text.style.ForegroundColorSpan
-import android.widget.EditText
-import android.widget.ImageButton
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
+import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.google.firebase.auth.FirebaseAuth
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -50,6 +48,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private lateinit var scrollView: ScrollView
     private lateinit var inputField: EditText
     private lateinit var toolbarTitle: TextView
+    private lateinit var apiBar: LinearLayout
+    private lateinit var apiKeyField: EditText
     private var tts: TextToSpeech? = null
     private val executor = Executors.newSingleThreadExecutor()
     private val client = OkHttpClient()
@@ -59,16 +59,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var assistantName = "Jarvis"
     private var isFlashlightOn = false
     private var apiKey = ""
-    private var telegramToken = ""
 
     private val wakeWordReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            val cmd = intent?.getStringExtra("command") ?: ""
-            if (cmd.isNotEmpty()) runOnUiThread { handleCommand(cmd) }
-        }
-    }
-    
-    private val telegramReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val cmd = intent?.getStringExtra("command") ?: ""
             if (cmd.isNotEmpty()) runOnUiThread { handleCommand(cmd) }
@@ -80,7 +72,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         "вк" to "com.vkontakte.android", "тикток" to "com.zhiliaoapp.musically",
         "вотсап" to "com.whatsapp", "хром" to "com.android.chrome",
         "камера" to "com.transsion.camera", "настройки" to "com.android.settings",
-        "happ" to "com.happvpn.app", "впн" to "com.happvpn.app" // Пример пакета VPN
+        "happ" to "com.happvpn.app", "впн" to "com.happvpn.app"
     )
 
     private val requestPerms = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
@@ -94,25 +86,25 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        window.statusBarColor = android.graphics.Color.parseColor("#0B0B0E")
+        window.statusBarColor = Color.parseColor("#0B0B0E")
 
         logContainer = findViewById(R.id.logContainer)
         scrollView = findViewById(R.id.scrollView)
         inputField = findViewById(R.id.inputField)
         toolbarTitle = findViewById(R.id.toolbarTitle)
+        apiBar = findViewById(R.id.apiBar)
+        apiKeyField = findViewById(R.id.apiKeyField)
         val sendButton = findViewById<ImageButton>(R.id.sendButton)
         val voiceButton = findViewById<ImageButton>(R.id.voiceButton)
         val btnClear = findViewById<ImageButton>(R.id.btnClear)
         val btnMenu = findViewById<ImageButton>(R.id.btnMenu)
-        
+        val btnSaveKey = findViewById<Button>(R.id.btnSaveKey)
 
         val prefs = getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE)
         assistantName = prefs.getString("assistant_name", "Jarvis") ?: "Jarvis"
-        telegramToken = prefs.getString("telegram_token", "") ?: ""
-        
         apiKey = prefs.getString("api_key", "") ?: ""
         if (apiKey.isEmpty()) apiKey = BuildConfig.DEFAULT_API_KEY
-
+        apiKeyField.setText(apiKey)
         toolbarTitle.text = assistantName
 
         tts = TextToSpeech(this, this)
@@ -121,16 +113,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         val serviceIntent = Intent(this, VoiceService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
-        
-        if (telegramToken.isNotEmpty()) {
-        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(wakeWordReceiver, IntentFilter("WAKE_WORD_DETECTED"), Context.RECEIVER_NOT_EXPORTED)
-            registerReceiver(telegramReceiver, IntentFilter("TELEGRAM_COMMAND"), Context.RECEIVER_NOT_EXPORTED)
         } else {
             registerReceiver(wakeWordReceiver, IntentFilter("WAKE_WORD_DETECTED"))
-            registerReceiver(telegramReceiver, IntentFilter("TELEGRAM_COMMAND"))
+        }
+
+        btnSaveKey.setOnClickListener {
+            apiKey = apiKeyField.text.toString().trim()
+            prefs.edit().putString("api_key", apiKey).apply()
+            reply("Ключ сохранен! Теперь ИИ работает.")
+            apiBar.visibility = LinearLayout.GONE
         }
 
         sendButton.setOnClickListener {
@@ -139,33 +133,59 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         voiceButton.setOnClickListener { startVoiceRecognition() }
         btnClear.setOnClickListener { logContainer.removeAllViews() }
-        btnMenu.setOnClickListener { showCommandsMenu() }
-        
+        btnMenu.setOnClickListener { showMenuDialog() }
     }
 
-    private fun showSettingsDialog() {
-        val layout = LinearLayout(this).apply {
+    private fun showMenuDialog() {
+        val maskedKey = if (apiKey.length > 8) apiKey.take(5) + "****************" + apiKey.takeLast(4) else "Не установлен"
+        
+        val menuLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(40, 20, 40, 20)
+            setPadding(48, 32, 48, 32)
         }
-        val inputApi = EditText(this).apply { setText(apiKey); hint = "API Ключ ProxyAPI" }
-        val inputTg = EditText(this).apply { setText(telegramToken); hint = "Токен Telegram Бота" }
-        layout.addView(inputApi)
-        layout.addView(inputTg)
+
+        val tvKey = TextView(this).apply {
+            text = "Ваш ключ ИИ:\n$maskedKey\n(Нажмите, чтобы скопировать)"
+            setTextColor(Color.parseColor("#8B8BFF"))
+            textSize = 16f
+            setPadding(0, 0, 0, 32)
+        }
+        tvKey.setOnClickListener {
+            val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("API Key", apiKey))
+            Toast.makeText(this, "Ключ скопирован!", Toast.LENGTH_SHORT).show()
+        }
+
+        val btnChangeKey = Button(this).apply {
+            text = "Изменить ключ ИИ"
+            setBackgroundColor(Color.parseColor("#2A2A35"))
+            setTextColor(Color.WHITE)
+            setOnClickListener {
+                apiBar.visibility = LinearLayout.VISIBLE
+                // Закрываем диалог
+                (parent as? android.app.Dialog)?.dismiss()
+            }
+        }
+        
+        val btnLogout = Button(this).apply {
+            text = "Выйти из аккаунта"
+            setBackgroundColor(Color.parseColor("#FF5252"))
+            setTextColor(Color.WHITE)
+            setOnClickListener {
+                FirebaseAuth.getInstance().signOut()
+                startActivity(Intent(this@MainActivity, LoginActivity::class.java))
+                finish()
+            }
+        }
+
+        menuLayout.addView(tvKey)
+        menuLayout.addView(btnChangeKey)
+        menuLayout.addView(btnLogout)
 
         AlertDialog.Builder(this, com.google.android.material.R.style.Theme_Material3_Dark_Dialog_Alert)
-            .setTitle("Настройки")
-            .setView(layout)
-            .setPositiveButton("Сохранить") { _, _ ->
-                apiKey = inputApi.text.toString().trim()
-                telegramToken = inputTg.text.toString().trim()
-                getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE).edit().apply {
-                    putString("api_key", apiKey)
-                    putString("telegram_token", telegramToken)
-                }.apply()
-                reply("Настройки сохранены.")
-            }
-            .setNegativeButton("Отмена", null)
+            .setTitle("Настройки профиля")
+            .setView(menuLayout)
+            .setPositiveButton("Закрыть", null)
             .show()
     }
 
@@ -212,8 +232,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (cmd.contains("время")) {
             reply("Сейчас ${SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())}"); return
         }
-
-        // --- ACCESSIBILITY (VPN и свайпы) ---
         if (cmd.contains("включи впн") || cmd.contains("подключи впн")) {
             val pkg = appsMap["впн"]
             if (pkg != null) {
@@ -221,31 +239,29 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 if (intent != null) {
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     startActivity(intent)
-                    reply("Открываю VPN, сейчас нажму подключить...")
+                    reply("Открываю VPN...")
                     executor.execute {
-                        Thread.sleep(2500) // Ждем загрузки VPN
+                        Thread.sleep(2500)
                         runOnUiThread {
                             val success = JarvisAccessibilityService.instance?.clickByText(listOf("Connect", "Подключить", "Включить", "On", "Start"))
-                            if (success == true) reply("VPN подключен.") else reply("Не нашел кнопку подключения на экране.")
+                            if (success == true) reply("VPN подключен.") else reply("Кнопка не найдена.")
                         }
                     }
-                } else reply("Приложение VPN не найдено.")
-            } else reply("Пакет VPN не настроен в appsMap.")
+                }
+            } else reply("VPN не найдено.")
             return
         }
-
         if (cmd.contains("следующее видео") || cmd.contains("следующее") || cmd.contains("листни")) {
             val success = JarvisAccessibilityService.instance?.swipeUp()
-            if (success != null) reply("Листаю...") else reply("Служба управления (Accessibility) не включена.")
+            if (success != null) reply("Листаю...") else reply("Служба Accessibility не включена.")
             return
         }
 
-        // --- CHATGPT ---
         if (apiKey.isNotEmpty()) {
             reply("Думаю...")
             askChatGPT(raw)
         } else {
-            reply("Я не знаю такой команды, а API-ключ не установлен.")
+            reply("Для ИИ нужен ключ! Нажмите на три полоски вверху -> Изменить ключ ИИ.")
         }
     }
 
@@ -271,11 +287,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         val answer = JSONObject(resBody).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
                         runOnUiThread { reply(answer) }
                     } else {
-                        runOnUiThread { reply("Ошибка ИИ. Проверьте баланс или ключ.") }
+                        runOnUiThread { reply("Ошибка ИИ. Проверьте ключ и баланс.") }
                     }
                 }
             } catch (e: Exception) {
-                runOnUiThread { reply("Ошибка сети: ${e.message}") }
+                runOnUiThread { reply("Ошибка сети.") }
             }
         }
     }
@@ -311,13 +327,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         tv.layoutParams = params
         logContainer.addView(tv)
         scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-    }
-
-    private fun showCommandsMenu() {
-        val commands = "<b>Команды:</b><br>• открой (приложение)<br>• позвони (контакт)<br>• включи впн<br>• следующее видео / листни<br>• прочитай уведомления<br>• не беспокоить<br>• батарея / время<br><br>Или задайте любой вопрос ИИ!"
-        AlertDialog.Builder(this, com.google.android.material.R.style.Theme_Material3_Dark_Dialog_Alert)
-            .setTitle("Помощь").setMessage(Html.fromHtml(commands, Html.FROM_HTML_MODE_LEGACY))
-            .setPositiveButton("ОК", null).show()
     }
 
     private fun requestAllPermissions() {
@@ -377,7 +386,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     override fun onInit(status: Int) { if (status == TextToSpeech.SUCCESS) tts?.language = Locale("ru", "RU") }
     override fun onDestroy() {
-        try { unregisterReceiver(wakeWordReceiver); unregisterReceiver(telegramReceiver) } catch (e: Exception) {}
+        try { unregisterReceiver(wakeWordReceiver) } catch (e: Exception) {}
         tts?.shutdown(); super.onDestroy()
     }
 }
