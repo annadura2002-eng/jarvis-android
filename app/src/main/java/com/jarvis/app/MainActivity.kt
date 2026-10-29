@@ -13,6 +13,7 @@ import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.text.Html
 import android.text.SpannableString
 import android.text.style.ForegroundColorSpan
 import android.widget.*
@@ -122,54 +123,111 @@ class MainActivity : AppCompatActivity() {
         btnMenu.setOnClickListener { showMenuDialog() }
     }
 
-    // ФУНКЦИЯ ВКЛЮЧЕНИЯ ПУЗЫРЯ
+    private fun showMenuDialog() {
+        val menuLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 32, 48, 32) }
+        
+        val tvCommands = TextView(this).apply {
+            val commandsText = """
+                <b>Шаблоны команд:</b><br>
+                • открой (название приложения)<br>
+                • позвони (имя контакта)<br>
+                • напиши (имя) (текст)<br>
+                • батарея / время<br>
+                • будильник на 7:30<br>
+                • маршрут до (место)<br>
+                • громкость 50 / без звука<br>
+                • включи/выключи фонарик<br>
+                • найди в ютубе (запрос)<br>
+                • секрет (ваше слово)
+            """.trimIndent()
+            text = Html.fromHtml(commandsText, Html.FROM_HTML_MODE_LEGACY)
+            setTextColor(Color.WHITE); textSize = 14f; setLineSpacing(0f, 1.2f)
+        }
+
+        val btnAddSecret = Button(this).apply {
+            text = "Добавить секретную команду"
+            setBackgroundColor(Color.parseColor("#2DD4BF")); setTextColor(Color.WHITE)
+            setOnClickListener { (parent as? android.app.Dialog)?.dismiss(); addSecretCommandDialog() }
+        }
+
+        val btnVoiceSettings = Button(this).apply {
+            text = "Выбрать нейроголос"
+            setBackgroundColor(Color.parseColor("#262626")); setTextColor(Color.WHITE)
+            setOnClickListener { (parent as? android.app.Dialog)?.dismiss(); showVoiceSettingsDialog() }
+        }
+        
+        val btnBubble = Button(this).apply {
+            text = "Плавающий пузырь"
+            setBackgroundColor(Color.parseColor("#262626")); setTextColor(Color.WHITE)
+            setOnClickListener { toggleFloatingBubble(); (parent as? android.app.Dialog)?.dismiss() }
+        }
+
+        val btnClear = Button(this).apply {
+            text = "Очистить чат"
+            setBackgroundColor(Color.parseColor("#262626")); setTextColor(Color.WHITE)
+            setOnClickListener { logContainer.removeAllViews(); (parent as? android.app.Dialog)?.dismiss() }
+        }
+
+        val btnLogout = Button(this).apply {
+            text = "Выйти"; setBackgroundColor(Color.parseColor("#F87171")); setTextColor(Color.WHITE)
+            setOnClickListener { FirebaseAuth.getInstance().signOut(); startActivity(Intent(this@MainActivity, LoginActivity::class.java)); finish() }
+        }
+        
+        val scroll = ScrollView(this)
+        scroll.addView(menuLayout)
+        menuLayout.addView(tvCommands); menuLayout.addView(btnAddSecret); menuLayout.addView(btnVoiceSettings); menuLayout.addView(btnBubble); menuLayout.addView(btnClear); menuLayout.addView(btnLogout)
+
+        AlertDialog.Builder(this, com.google.android.material.R.style.Theme_Material3_Dark_Dialog_Alert)
+            .setTitle("Меню и Команды").setView(scroll).setPositiveButton("Закрыть", null).show()
+    }
+
     private fun toggleFloatingBubble() {
         if (!Settings.canDrawOverlays(this)) {
             Toast.makeText(this, "Разрешите отображение поверх других окон", Toast.LENGTH_LONG).show()
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
         } else {
             startService(Intent(this, FloatingBubbleService::class.java))
-            Toast.makeText(this, "Пузырь включен! Вы можете перемещать его.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Пузырь включен!", Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun showMenuDialog() {
-        val menuLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 32, 48, 32) }
-        
-        val tvCommands = TextView(this).apply {
-            text = "Команды:\n• открой (приложение)\n• нажми (кнопку)\n• добавь секретную команду\n\nНастройки:"
-            setTextColor(Color.WHITE); textSize = 15f; setLineSpacing(0f, 1.2f)
-        }
+    private fun addSecretCommandDialog() {
+        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 32, 48, 32) }
+        val inputKey = EditText(this).apply { hint = "Кодовое слово (например: огурец)" }
+        val inputAction = EditText(this).apply { hint = "Что сделать (например: открой телеграм)" }
+        layout.addView(inputKey); layout.addView(inputAction)
 
-        val btnBubble = Button(this).apply {
-            text = "Включить плавающий пузырь"
-            setBackgroundColor(Color.parseColor("#6C63FF")); setTextColor(Color.WHITE)
-            setOnClickListener { 
-                toggleFloatingBubble()
-                (parent as? android.app.Dialog)?.dismiss() 
+        AlertDialog.Builder(this)
+            .setTitle("Секретная команда")
+            .setMessage("Вызывается словом 'секрет' (например: 'секрет огурец')")
+            .setView(layout)
+            .setPositiveButton("Сохранить") { _, _ ->
+                val k = inputKey.text.toString().lowercase().trim()
+                val a = inputAction.text.toString().lowercase().trim()
+                if (k.isNotEmpty() && a.isNotEmpty()) {
+                    customCommands[k] = a
+                    saveCustomCommands()
+                    reply("Секретная команда '$k' добавлена!")
+                }
+            }.setNegativeButton("Отмена", null).show()
+    }
+
+    private fun loadCustomCommands() {
+        val prefs = getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE)
+        val saved = prefs.getString("custom_commands", "") ?: ""
+        if (saved.isNotEmpty()) {
+            val items = saved.split(";;")
+            for (item in items) {
+                val parts = item.split("::")
+                if (parts.size == 2) customCommands[parts[0]] = parts[1]
             }
         }
+    }
 
-        val btnVoiceSettings = Button(this).apply {
-            text = "Выбрать нейроголос"
-            setBackgroundColor(Color.parseColor("#2A2A35")); setTextColor(Color.WHITE)
-            setOnClickListener { (parent as? android.app.Dialog)?.dismiss(); showVoiceSettingsDialog() }
-        }
-
-        val btnClear = Button(this).apply {
-            text = "Очистить чат"
-            setBackgroundColor(Color.parseColor("#2A2A35")); setTextColor(Color.WHITE)
-            setOnClickListener { logContainer.removeAllViews(); (parent as? android.app.Dialog)?.dismiss() }
-        }
-
-        val btnLogout = Button(this).apply {
-            text = "Выйти"; setBackgroundColor(Color.parseColor("#FF5252")); setTextColor(Color.WHITE)
-            setOnClickListener { FirebaseAuth.getInstance().signOut(); startActivity(Intent(this@MainActivity, LoginActivity::class.java)); finish() }
-        }
-        menuLayout.addView(tvCommands); menuLayout.addView(btnBubble); menuLayout.addView(btnVoiceSettings); menuLayout.addView(btnClear); menuLayout.addView(btnLogout)
-
-        AlertDialog.Builder(this, com.google.android.material.R.style.Theme_Material3_Dark_Dialog_Alert)
-            .setTitle("Меню").setView(menuLayout).setPositiveButton("Закрыть", null).show()
+    private fun saveCustomCommands() {
+        val sb = StringBuilder()
+        for ((k, v) in customCommands) sb.append("$k::$v;;")
+        getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE).edit().putString("custom_commands", sb.toString()).apply()
     }
 
     private fun showVoiceSettingsDialog() {
@@ -189,18 +247,6 @@ class MainActivity : AppCompatActivity() {
                 getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE).edit().putString("neural_voice", selectedVoice).apply()
                 reply("Голос изменен на $selectedVoice")
             }.setNegativeButton("Отмена", null).show()
-    }
-
-    private fun loadCustomCommands() {
-        val prefs = getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE)
-        val saved = prefs.getString("custom_commands", "") ?: ""
-        if (saved.isNotEmpty()) {
-            val items = saved.split(";;")
-            for (item in items) {
-                val parts = item.split("::")
-                if (parts.size == 2) customCommands[parts[0]] = parts[1]
-            }
-        }
     }
 
     private fun showBeautifulVoiceInput() {
@@ -241,8 +287,17 @@ class MainActivity : AppCompatActivity() {
         logUser(raw)
         val access = JarvisAccessibilityService.instance
 
-        for ((key, action) in customCommands) {
-            if (cmd.contains(key)) { reply("Выполняю секретную команду: $action"); cmd = action; break }
+        // Проверка секретных команд по слову "секрет"
+        if (cmd.contains("секрет ")) {
+            val secretWord = cmd.replace("секрет ", "").trim()
+            if (customCommands.containsKey(secretWord)) {
+                val action = customCommands[secretWord]!!
+                reply("Выполняю секретную команду: $action")
+                cmd = action // Подменяем команду
+            } else {
+                reply("Секретная команда '$secretWord' не найдена.")
+                return
+            }
         }
 
         if (cmd.contains("нажми ") || cmd.contains("сделай ")) {
@@ -268,13 +323,46 @@ class MainActivity : AppCompatActivity() {
             if (openAppUniversal(app)) reply("Открываю $app") else reply("Не найдено")
             return
         }
-        if (cmd.contains("листни") || cmd.contains("следующее") || cmd.contains("вниз")) { access?.swipeUp(); reply("Листаю..."); return }
+        
+        if (cmd.contains("позвони ")) {
+            val target = cmd.substringAfter("позвони ").trim()
+            if (target.replace(" ", "").replace("+","").all { it.isDigit() }) callNumber(target)
+            else {
+                val num = findContactNumber(target)
+                if (num != null) callNumber(num) else reply("Контакт не найден")
+            }
+            return
+        }
+
         if (cmd.contains("батаре")) {
             val bm = getSystemService(BATTERY_SERVICE) as android.os.BatteryManager
             reply("Заряд: ${bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)}%"); return
         }
+        
+        if (cmd.contains("время")) {
+            reply("Сейчас ${java.text.SimpleDateFormat("HH:mm", Locale.getDefault()).format(java.util.Date())}"); return
+        }
 
         if (apiKey.isNotEmpty()) askChatGPT(raw) else reply("Для ИИ нужен ключ!")
+    }
+
+    private fun callNumber(number: String) {
+        try { startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:$number"))); reply("Соединяю...") } catch (e: SecurityException) { reply("Нет разрешения") }
+    }
+
+    private fun findContactNumber(name: String): String? {
+        val uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
+        val cursor = contentResolver.query(uri, null, null, null, null) ?: return null
+        var found: String? = null
+        cursor.use {
+            while (it.moveToNext()) {
+                val dn = it.getString(it.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)) ?: continue
+                if (dn.lowercase().contains(name.lowercase())) {
+                    found = it.getString(it.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER)); break
+                }
+            }
+        }
+        return found
     }
 
     private fun askAiForButton(prompt: String): String? {
@@ -336,8 +424,12 @@ class MainActivity : AppCompatActivity() {
     private fun animateBotReply(fullText: String) {
         val tv = TextView(this)
         tv.textSize = 15f; tv.setPadding(32, 24, 32, 24)
+        
+        // Белый текст
+        tv.setTextColor(Color.WHITE)
+        
         val drawable = GradientDrawable().apply {
-            colors = intArrayOf(Color.parseColor("#2A2A35"), Color.parseColor("#1E1E28"))
+            colors = intArrayOf(Color.parseColor("#262626"), Color.parseColor("#1A1A1A"))
             gradientType = GradientDrawable.LINEAR_GRADIENT
             orientation = GradientDrawable.Orientation.TL_BR
             cornerRadius = 24f
@@ -347,29 +439,33 @@ class MainActivity : AppCompatActivity() {
         val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         params.setMargins(0, 8, 64, 8); tv.layoutParams = params
         logContainer.addView(tv); scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+        
+        // Синхронизация: сначала запускаем звук, потом печатаем
         neuralTTS.speak(fullText, selectedVoice)
+
         var index = 0
         val runnable = object : Runnable {
             override fun run() {
                 if (index <= fullText.length) {
                     tv.text = fullText.substring(0, index); index++; scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-                    uiHandler.postDelayed(this, 30)
+                    uiHandler.postDelayed(this, 40) // Чуть замедлили печать, чтобы догнать голос
                 }
             }
         }
-        uiHandler.post(runnable)
+        uiHandler.postDelayed(runnable, 300) // Небольшая задержка перед стартом печати
     }
 
     private fun logUser(text: String) { runOnUiThread { addBubble(text, true) } }
     private fun reply(text: String) { runOnUiThread { addBubble(text, false) }; neuralTTS.speak(text, selectedVoice) }
     private fun addBubble(text: String, isUser: Boolean) {
         val tv = TextView(this)
+        tv.setTextColor(Color.WHITE)
         val spannable = SpannableString(text)
         spannable.setSpan(ForegroundColorSpan(Color.WHITE), 0, text.length, 0)
-        if (isUser) tv.setBackgroundColor(Color.parseColor("#2A2A35"))
+        if (isUser) tv.setBackgroundColor(Color.parseColor("#262626"))
         else {
             val drawable = GradientDrawable().apply {
-                colors = intArrayOf(Color.parseColor("#2A2A35"), Color.parseColor("#1E1E28"))
+                colors = intArrayOf(Color.parseColor("#262626"), Color.parseColor("#1A1A1A"))
                 gradientType = GradientDrawable.LINEAR_GRADIENT
                 orientation = GradientDrawable.Orientation.TL_BR
                 cornerRadius = 24f
