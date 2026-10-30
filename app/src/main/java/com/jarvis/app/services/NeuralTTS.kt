@@ -66,7 +66,7 @@ class NeuralTTS(private val context: Context, private var apiKey: String) : Text
 
                 client.newCall(request).execute().use { response ->
                     // Если пока качали, пришел новый запрос — отменяем этот
-                    if (currentId != requestId.get()) return@execute
+                    if (currentId != requestId.get()) { return@execute }
                     
                     if (response.isSuccessful) {
                         val audioBytes = response.body?.bytes()
@@ -75,7 +75,7 @@ class NeuralTTS(private val context: Context, private var apiKey: String) : Text
                             FileOutputStream(tempFile).use { it.write(audioBytes) }
                             
                             android.os.Handler(context.mainLooper).post {
-                                if (currentId != requestId.get()) return@post
+                                if (currentId != requestId.get()) { return@post }
                                 mediaPlayer = MediaPlayer().apply {
                                     setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANT).build())
                                     setDataSource(tempFile.absolutePath)

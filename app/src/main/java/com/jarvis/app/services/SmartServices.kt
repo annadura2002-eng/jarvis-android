@@ -12,7 +12,7 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.app.RemoteInput
 import android.util.Log
-import com.jarvis.app.core.PrefsManager
+
 
 // --- СЕРВИС ГЕОЛОКАЦИИ (Энергоэффективный) ---
 class GeoService : Service() {
@@ -59,8 +59,8 @@ class GeoService : Service() {
 // --- СЕРВИС АВТО-ОТВЕТЧИКА (Реальный ответ через уведомления) ---
 class SmartNotificationService : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        PrefsManager.init(this)
-        if (!PrefsManager.autoReplyEnabled) return
+        com.jarvis.app.core.PrefsManager.init(this)
+        if (!com.jarvis.app.core.PrefsManager.autoReplyEnabled) return
 
         val pkg = sbn.packageName
         // Поддерживаемые приложения
@@ -79,7 +79,7 @@ class SmartNotificationService : NotificationListenerService() {
                 if (remoteInput != null) {
                     val intent = Intent()
                     val bundle = android.os.Bundle()
-                    bundle.putCharSequence(remoteInput.resultKey, PrefsManager.autoReplyText)
+                    bundle.putCharSequence(remoteInput.resultKey, com.jarvis.app.core.PrefsManager.autoReplyText)
                     RemoteInput.addResultsToIntent(action.remoteInputs, intent, bundle)
                     try {
                         action.actionIntent.send(this, 0, intent)

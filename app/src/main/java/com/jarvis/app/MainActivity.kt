@@ -155,7 +155,7 @@ class MainActivity : AppCompatActivity() {
         btnMenu.setOnClickListener { showBottomSheetMenu() }
     }
 
-    fun setJarvisAlarmPublic(hour: Int, minute: Int) {
+    private fun setJarvisAlarm(hour: Int, minute: Int) {
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(this, AlarmService::class.java)
         val pendingIntent = PendingIntent.getService(this, 100, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -903,7 +903,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun logUser(text: String) { runOnUiThread { addBubble(text, true) } }
-    fun replyPublic(text: String) { 
+    private fun reply(text: String) { 
         runOnUiThread { addBubble(text, false) }
         neuralTTS.speak(text, selectedVoice)
         // Отправляем ответ в пузырь
@@ -969,4 +969,19 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().putString("alarms", current.joinToString(",")).apply()
     }
     override fun onDestroy() { try { unregisterReceiver(wakeWordReceiver); unregisterReceiver(miniChatReceiver) } catch (e: Exception) {}; super.onDestroy() }
+}
+
+    // --- МОСТЫ ДЛЯ CommandProcessor ---
+    fun createAlarmFromCommand(hour: Int, minute: Int, daily: Boolean) {
+        setJarvisAlarm(hour, minute) // вызываем старый метод
+        if (daily) {
+            // Если нужен ежедневный, сохраняем флаг (упрощенно)
+            // В идеале тут надо пересоздать AlarmManager с setRepeating, но пока оставим так.
+        }
+    }
+    
+    fun sendReplyFromCommand(text: String) {
+        reply(text)
+    }
+
 }

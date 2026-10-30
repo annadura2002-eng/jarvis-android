@@ -42,7 +42,7 @@ class PermissionsActivity : AppCompatActivity() {
         btnContacts.setOnClickListener {
             requestPerms.launch(arrayOf(Manifest.permission.READ_CONTACTS))
         }
-        btnPhoneSms.setOnClickListener {
+        // btnPhoneSms.setOnClickListener {
             requestPerms.launch(arrayOf(Manifest.permission.CALL_PHONE, Manifest.permission.SEND_SMS, Manifest.permission.READ_PHONE_STATE))
         }
         btnNotifs.setOnClickListener {
