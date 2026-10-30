@@ -434,6 +434,247 @@ class MainActivity : AppCompatActivity() {
             }, android.telephony.PhoneStateListener.LISTEN_CALL_STATE)
         }
     }
+
+    private fun handleCommand(raw: String) {
+        if (CommandProcessor.process(this, raw)) return
+        
+        var cmd = raw.lowercase(Locale.ROOT).trim()
+        
+        if (cmd == "стоп" || cmd == "stop" || cmd == "замолчи") {
+            neuralTTS.stop()
+            Toast.makeText(this, "Остановлено", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        logUser(raw)
+        val access = JarvisAccessibilityService.instance
+        val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+
+        if (cmd.contains("секрет ")) {
+            val secretWord = cmd.replace("секрет ", "").trim()
+            if (customCommands.containsKey(secretWord)) {
+                val action = customCommands[secretWord]!!
+                reply("Выполняю секретную команду: $action"); cmd = action
+            } else { reply("Секретная команда '$secretWord' не найдена."); return }
+        }
+
+        if (cmd.contains("пауза") || cmd.contains("поставь на паузу")) {
+            audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PAUSE))
+            audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PAUSE))
+            reply("Пауза."); return
+        }
+        if (cmd.contains("играй") || cmd.contains("продолжи музыку")) {
+            audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY))
+            audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY))
+            reply("Включаю."); return
+        }
+        if (cmd.contains("следующий трек") || cmd.contains("следующую песню")) {
+            audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_NEXT))
+            audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_NEXT))
+            reply("Следующий трек."); return
+        }
+        if (cmd.contains("предыдущий трек") || cmd.contains("предыдущую песню")) {
+            audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PREVIOUS))
+            audioManager.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PREVIOUS))
+            reply("Предыдущий трек."); return
+        }
+
+        if (cmd.contains("громкость")) {
+            val num = cmd.filter { it.isDigit() }.toIntOrNull()
+            if (num != null) {
+                val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, num * max / 100, 0)
+                reply("Громкость $num процентов.")
+            } else reply("Скажите: громкость 50")
+            return
+        }
+        if (cmd.contains("выключи звук") || cmd.contains("без звука")) {
+            audioManager.ringerMode = AudioManager.RINGER_MODE_SILENT
+            reply("Звук выключен."); return
+        }
+
+        if (cmd.contains("таймер на ")) {
+            val timePart = cmd.replace("таймер на ", "").trim()
+            var mins = 0
+            if (timePart.contains("секунд")) mins = (timePart.filter { it.isDigit() }.toIntOrNull() ?: 0) / 60
+            else if (timePart.contains("минут")) mins = timePart.filter { it.isDigit() }.toIntOrNull() ?: 0
+            if (mins > 0) {
+                val cal = Calendar.getInstance()
+                cal.add(Calendar.MINUTE, mins)
+                setJarvisAlarm(cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE))
+            } else reply("Скажите: таймер на 5 минут")
+            return
+        }
+
+        if (cmd.contains("список будильников") || cmd.contains("какие будильники")) {
+            val alarms = PrefsManager.getAlarms()
+            if (alarms.isEmpty()) reply("У вас нет установленных будильников.")
+            else reply("Ваши будильники: " + alarms.joinToString(", ") { String.format("%02d:%02d", it.hour, it.minute) })
+            return
+        }
+        if (cmd.contains("выключи будильник") || cmd.contains("убери будильник")) {
+            val alarms = PrefsManager.getAlarms()
+            for (a in alarms) PrefsManager.removeAlarm(a.id)
+            reply("Все будильники выключены.")
+            return
+        }
+        if (cmd.contains("будильник") || cmd.contains("alarm")) {
+            val regex = Regex("(\\d{1,2})[:. ](\\d{2})")
+            val match = regex.find(cmd)
+            if (match != null) {
+                val h = match.groupValues[1].toIntOrNull() ?: 7
+                val m = match.groupValues[2].toIntOrNull() ?: 0
+                val isDaily = cmd.contains("каждый день")
+                setJarvisAlarm(h, m, isDaily)
+            } else reply("Скажите: будильник на 7:30")
+            return
+        }
+
+        if (cmd.contains("включи вайфай") || cmd.contains("включи wi-fi")) {
+            try { startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)); reply("Открываю настройки Wi-Fi.") } 
+            catch (e: Exception) { reply("Не удалось открыть настройки.") }
+            return
+        }
+        if (cmd.contains("включи блютуз") || cmd.contains("включи bluetooth")) {
+            startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+            reply("Открываю настройки Bluetooth."); return
+        }
+
+        if (cmd.contains("отправь в телеграм ")) {
+            val parts = cmd.replace("отправь в телеграм ", "").split(" ", limit = 2)
+            if (parts.size == 2) {
+                val contact = parts[0]
+                val message = parts[1]
+                val intent = packageManager.getLaunchIntentForPackage("org.telegram.messenger")
+                if (intent != null) {
+                    startActivity(intent); reply("Открываю телеграм...")
+                    executor.execute {
+                        Thread.sleep(2000)
+                        runOnUiThread {
+                            access?.clickByText(listOf("Search", "Поиск"))
+                            Thread.sleep(1000)
+                            access?.inputText(contact)
+                            Thread.sleep(1500)
+                            access?.clickByText(listOf(contact))
+                            Thread.sleep(1500)
+                            access?.inputText(message)
+                            Thread.sleep(500)
+                            access?.clickByText(listOf("Send", "Отправить", "➤"))
+                            reply("Сообщение отправлено!")
+                        }
+                    }
+                }
+            } else reply("Скажите: отправь в телеграм Даша привет")
+            return
+        }
+
+        if (cmd.startsWith("смени имя на ")) {
+            assistantName = cmd.replace("смени имя на ", "").trim().replaceFirstChar { it.uppercase() }
+            PrefsManager.assistantName = assistantName
+            toolbarTitle.text = assistantName
+            stopService(Intent(this, VoiceService::class.java))
+            val serviceIntent = Intent(this, VoiceService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
+            reply("Теперь меня зовут $assistantName")
+            return
+        }
+
+        if (cmd.startsWith("напиши ")) {
+            val parts = cmd.substringAfter("напиши ").trim().split(" ", limit = 2)
+            if (parts.size == 2) {
+                val contactName = parts[0]
+                val messageText = parts[1]
+                val num = findContactNumber(contactName)
+                if (num != null) {
+                    val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$num"))
+                    intent.putExtra("sms_body", messageText)
+                    startActivity(intent)
+                    reply("Открываю СМС для $contactName")
+                } else reply("Контакт $contactName не найден")
+            } else reply("Скажите: напиши [имя] [текст]")
+            return
+        }
+
+        if (cmd.contains("запиши звонок") || cmd.contains("запись звонка")) {
+            isCallRecording = true
+            reply("При следующем звонке начну запись.")
+            return
+        }
+
+        if (cmd.contains("маршрут до ") || cmd.contains("как доехать до ") || cmd.contains("как добраться до ")) {
+            val place = cmd.replace("маршрут до ", "").replace("как доехать до ", "").replace("как добраться до ", "").trim()
+            if (place.isNotEmpty()) {
+                reply("Строю маршрут до $place...")
+                executor.execute {
+                    val lat = getCurrentLatitude()
+                    val lon = getCurrentLongitude()
+                    runOnUiThread {
+                        val url = if (lat != null && lon != null) {
+                            "https://www.google.com/maps/dir/?api=1&origin=$lat,$lon&destination=${Uri.encode(place)}"
+                        } else {
+                            "https://www.google.com/maps/search/?api=1&query=${Uri.encode(place)}"
+                        }
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    }
+                }
+            } else reply("Скажите: маршрут до (адрес)")
+            return
+        }
+
+        if (cmd.contains("погода")) {
+            val city = cmd.replace("погода", "").replace("в", "").trim().ifEmpty { "москва" }
+            reply("Смотрю погоду в $city...")
+            executor.execute {
+                val weatherInfo = getWeather(city)
+                runOnUiThread {
+                    if (weatherInfo != null) reply(weatherInfo) else reply("Не удалось узнать погоду")
+                }
+            }
+            return
+        }
+
+        if (cmd.startsWith("найди в ютубе ") || cmd.startsWith("найди на ютубе ")) {
+            val query = cmd.replace("найди в ютубе ", "").replace("найди на ютубе ", "").replace(" ", "+")
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=$query")))
+            reply("Ищу в ютубе: $query")
+            return
+        }
+
+        if (cmd.startsWith("найди в тик токе ") || cmd.startsWith("найди в тиктоке ")) {
+            val query = cmd.replace("найди в тик токе ", "").replace("найди в тиктоке ", "").replace(" ", "+")
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.tiktok.com/search?q=$query"))
+            try { startActivity(intent) } catch (e: Exception) {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("snssdk1233://search?keyword=$query")))
+            }
+            reply("Ищу в TikTok: $query")
+            return
+        }
+
+        if (cmd.startsWith("загугли ") || cmd.startsWith("найди в интернете ")) {
+            val query = cmd.replace("загугли ", "").replace("найди в интернете ", "").replace(" ", "+")
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=$query")))
+            reply("Ищу в Google: $query")
+            return
+        }
+
+        if (cmd.contains("нажми ") || cmd.contains("сделай ")) {
+            if (apiKey.isEmpty()) { reply("Для этого нужен ИИ-ключ!"); return }
+            reply("Анализирую экран...")
+            executor.execute {
+                val screenText = access?.getScreenText() ?: ""
+                if (screenText.isEmpty()) { runOnUiThread { reply("Служба Accessibility выключена.") }; return@execute }
+                val prompt = "На экране телефона есть текст: [$screenText]. Пользователь просит: '$cmd'. Найди кнопку, выведи ТОЛЬКО ТЕКСТ кнопки."
+                val buttonName = askAiForButton(prompt)
+                runOnUiThread {
+                    if (buttonName != null && buttonName != "NO") {
+                        val success = access?.clickByText(listOf(buttonName))
+                        if (success == true) reply("Нажал на '$buttonName'") else reply("Не нашел кнопку.")
+                    } else reply("Не понял, куда нажимать.")
+                }
+            }
+            return
+        }
+
         if (cmd.contains("открой ")) {
             val app = cmd.substringAfter("открой ").trim().replace("приложение", "").trim()
             if (openAppUniversal(app)) reply("Открываю $app") else reply("Не найдено")
