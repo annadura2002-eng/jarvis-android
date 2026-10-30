@@ -1,7 +1,9 @@
 package com.jarvis.app
 
 import android.Manifest
+import android.app.AlarmManager
 import android.app.Dialog
+import android.app.PendingIntent
 import android.content.*
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -833,7 +835,7 @@ class MainActivity : AppCompatActivity() {
         neuralTTS.speak(text, selectedVoice)
         // Отправляем ответ в пузырь
         val intent = Intent("BUBBLE_ANSWER")
-        intent.putExtra("answer", text)
+        intent.putExtra("answer", text as String)
         sendBroadcast(intent)
     }
     

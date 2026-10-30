@@ -12,6 +12,7 @@ import android.os.IBinder
 import android.view.*
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
+import kotlin.math.abs
 
 class FloatingBubbleService : Service() {
 
@@ -77,7 +78,7 @@ class FloatingBubbleService : Service() {
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
-                        if (Math.abs(event.rawX - initialTouchX) < 10 && Math.abs(event.rawY - initialTouchY) < 10) {
+                        if (abs(event.rawX - initialTouchX) < 10 && abs(event.rawY - initialTouchY) < 10) {
                             if (isChatOpen) closeChat() else showMiniChat()
                         }
                         return true
@@ -95,7 +96,8 @@ class FloatingBubbleService : Service() {
         if (isChatOpen) return
         isChatOpen = true
 
-        val chatLayout = layoutInflater.inflate(R.layout.dialog_bubble_chat, null)
+        // Используем LayoutInflater.from(this), так как в сервисе нет свойства layoutInflater
+        val chatLayout = LayoutInflater.from(this).inflate(R.layout.dialog_bubble_chat, null)
         tvAnswer = chatLayout.findViewById(R.id.tvBubbleAnswer)
         val etInput = chatLayout.findViewById<EditText>(R.id.etBubbleInput)
         val btnSend = chatLayout.findViewById<Button>(R.id.btnBubbleSend)
@@ -107,7 +109,8 @@ class FloatingBubbleService : Service() {
                 tvAnswer?.visibility = View.VISIBLE
                 tvAnswer?.text = "Думаю..."
                 val intent = Intent("MINI_CHAT_COMMAND")
-                intent.putExtra("command", question)
+                // Явно указываем, что передаем String
+                intent.putExtra("command", question as String)
                 sendBroadcast(intent)
             }
         }
@@ -125,7 +128,6 @@ class FloatingBubbleService : Service() {
         chatView = chatLayout
         windowManager.addView(chatView, paramsChat)
 
-        // Даем фокус и открываем клавиатуру
         etInput.requestFocus()
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         imm.showSoftInput(etInput, InputMethodManager.SHOW_IMPLICIT)
