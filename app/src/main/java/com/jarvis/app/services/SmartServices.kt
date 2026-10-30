@@ -14,7 +14,6 @@ import android.app.RemoteInput
 import android.util.Log
 import com.jarvis.app.core.PrefsManager
 
-// --- СЕРВИС ГЕОЛОКАЦИИ ---
 class GeoService : Service() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var locationCallback: LocationCallback
@@ -51,7 +50,6 @@ class GeoService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 }
 
-// --- СЕРВИС АВТО-ОТВЕТЧИКА ---
 class SmartNotificationService : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         PrefsManager.init(this)
@@ -62,7 +60,6 @@ class SmartNotificationService : NotificationListenerService() {
 
         val extras = sbn.notification.extras
         val title = extras.getString("android.title") ?: "Неизвестный"
-        val text = extras.getCharSequence("android.text")?.toString() ?: ""
 
         val actions = sbn.notification.actions ?: return
         for (action in actions) {
@@ -77,7 +74,7 @@ class SmartNotificationService : NotificationListenerService() {
                         action.actionIntent.send(this, 0, intent)
                         Log.d("JarvisAutoReply", "Ответил на сообщение от $title")
                     } catch (e: Exception) {
-                        Log.e("JarvisAutoReply", "Ошибка отправки: ${e.message}")
+                        Log.e("JarvisAutoReply", "Ошибка: ${e.message}")
                     }
                 }
             }

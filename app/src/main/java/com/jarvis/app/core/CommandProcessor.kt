@@ -5,7 +5,7 @@ import com.jarvis.app.MainActivity
 object CommandProcessor {
     fun process(context: MainActivity, raw: String): Boolean {
         val cmd = raw.lowercase().trim()
-        
+
         if (cmd.startsWith("будильник на") || cmd.startsWith("поставь будильник на")) {
             val timePart = cmd.replace("поставь ", "").replace("будильник на ", "").trim()
             val isDaily = cmd.contains("каждый день") || cmd.contains("ежедневно")
@@ -24,7 +24,7 @@ object CommandProcessor {
             if (alarms.isEmpty()) {
                 context.sendReplyFromCommand("У вас нет установленных будильников.")
             } else {
-                val text = alarms.joinToString("\n") { 
+                val text = alarms.joinToString("\n") {
                     val time = String.format("%02d:%02d", it.hour, it.minute)
                     if (it.daily) "🕒 $time (каждый день)" else "🕒 $time (один раз)"
                 }
@@ -43,7 +43,7 @@ object CommandProcessor {
             context.sendReplyFromCommand("Автоответ выключен.")
             return true
         }
-        
+
         if (cmd.contains("переведи с ") && cmd.contains(" на ")) {
             val parts = cmd.split(" на ")
             if (parts.size == 2) {
@@ -53,7 +53,7 @@ object CommandProcessor {
                 return true
             }
         }
-        
+
         return false
     }
 }

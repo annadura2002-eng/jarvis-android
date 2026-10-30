@@ -50,7 +50,6 @@ class PermissionsActivity : AppCompatActivity() {
         btnAccess.setOnClickListener {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
-
         btnContinue.setOnClickListener {
             startActivity(Intent(this, LoginActivity::class.java))
             finish()
