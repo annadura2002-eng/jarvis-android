@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Button
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -42,7 +41,7 @@ class PermissionsActivity : AppCompatActivity() {
         btnContacts.setOnClickListener {
             requestPerms.launch(arrayOf(Manifest.permission.READ_CONTACTS))
         }
-        // btnPhoneSms.setOnClickListener {
+        btnPhoneSms.setOnClickListener {
             requestPerms.launch(arrayOf(Manifest.permission.CALL_PHONE, Manifest.permission.SEND_SMS, Manifest.permission.READ_PHONE_STATE))
         }
         btnNotifs.setOnClickListener {
@@ -68,18 +67,15 @@ class PermissionsActivity : AppCompatActivity() {
         val hasContacts = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
         val hasPhone = ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
         val hasSms = ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
-
         val hasNotifs = isNotificationServiceEnabled()
         val hasAccess = isAccessibilityServiceEnabled()
 
-        // Меняем текст кнопок на "Выдано"
         if (hasMic) btnMic.text = "Выдано ✓" else btnMic.text = "Выдать"
         if (hasContacts) btnContacts.text = "Выдано ✓" else btnContacts.text = "Выдать"
         if (hasPhone && hasSms) btnPhoneSms.text = "Выдано ✓" else btnPhoneSms.text = "Выдать"
         if (hasNotifs) btnNotifs.text = "Выдано ✓" else btnNotifs.text = "Выдать"
         if (hasAccess) btnAccess.text = "Выдано ✓" else btnAccess.text = "Выдать"
 
-        // Кнопка продолжить активна, если выдано всё (кроме Accessibility - он опционален)
         if (hasMic && hasContacts && hasPhone && hasSms && hasNotifs) {
             btnContinue.isEnabled = true
             btnContinue.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#5B5BFF"))

@@ -997,14 +997,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() { try { unregisterReceiver(wakeWordReceiver); unregisterReceiver(miniChatReceiver) } catch (e: Exception) {}; super.onDestroy() }
 }
 
-    // --- МОСТЫ ДЛЯ CommandProcessor ---
-    fun createAlarmFromCommand(hour: Int, minute: Int, daily: Boolean) {
-        setJarvisAlarm(hour, minute) // вызываем старый метод
-        if (daily) {
-            // Если нужен ежедневный, сохраняем флаг (упрощенно)
-            // В идеале тут надо пересоздать AlarmManager с setRepeating, но пока оставим так.
-        }
-    }
+    
     
     fun sendReplyFromCommand(text: String) {
         reply(text)
@@ -1080,6 +1073,61 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) { callback("Ошибка сети") }
         }
+    }
+
+
+    // --- МОСТЫ ДЛЯ CommandProcessor ---
+    fun createAlarmFromCommand(hour: Int, minute: Int, daily: Boolean) {
+        setJarvisAlarm(hour, minute) 
+    }
+    
+    fun sendReplyFromCommand(text: String) {
+        reply(text)
+    }
+    
+    fun startTranslationMode(fromLang: String, toLang: String) {
+        reply("Режим перевода ($fromLang -> $toLang) включен. Скажите 'стоп' чтобы выйти.")
+        val sr = android.speech.SpeechRecognizer.createSpeechRecognizer(this)
+        sr.setRecognitionListener(object : android.speech.RecognitionListener {
+            override fun onResults(results: android.os.Bundle?) {
+                val text = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
+                if (text.lowercase().contains("стоп") || text.lowercase().contains("stop")) {
+                    sr.destroy(); reply("Режим перевода выключен."); return
+                }
+                if (text.isNotEmpty()) {
+                    executor.execute {
+                        try {
+                            val json = org.json.JSONObject().apply {
+                                put("model", "gpt-4o-mini")
+                                put("messages", org.json.JSONArray().apply {
+                                    put(org.json.JSONObject().apply { put("role", "system"); put("content", "Ты переводчик. Переведи текст с $fromLang на $toLang. Отвечай ТОЛЬКО переводом.") })
+                                    put(org.json.JSONObject().apply { put("role", "user"); put("content", text) })
+                                })
+                            }
+                            val body = json.toString().toRequestBody("application/json".toMediaType())
+                            val req = okhttp3.Request.Builder().url("https://api.proxyapi.ru/openai/v1/chat/completions").addHeader("Authorization", "Bearer $apiKey").post(body).build()
+                            client.newCall(req).execute().use { res ->
+                                if (res.isSuccessful) {
+                                    val ans = org.json.JSONObject(res.body!!.string()).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
+                                    runOnUiThread { addBubble("Оригинал: $text", true); animateBotReply(ans) }
+                                }
+                            }
+                        } catch (e: Exception) {}
+                    }
+                }
+                val intent = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply { putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM) }
+                sr.startListening(intent)
+            }
+            override fun onError(error: Int) { sr.startListening(android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)) }
+            override fun onReadyForSpeech(params: android.os.Bundle?) {}
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {}
+            override fun onPartialResults(partialResults: android.os.Bundle?) {}
+            override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
+        })
+        sr.startListening(android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH))
     }
 
 }

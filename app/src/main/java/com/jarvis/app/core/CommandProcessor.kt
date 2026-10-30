@@ -6,7 +6,6 @@ object CommandProcessor {
     fun process(context: MainActivity, raw: String): Boolean {
         val cmd = raw.lowercase().trim()
         
-        // 1. Будильники
         if (cmd.startsWith("будильник на") || cmd.startsWith("поставь будильник на")) {
             val timePart = cmd.replace("поставь ", "").replace("будильник на ", "").trim()
             val isDaily = cmd.contains("каждый день") || cmd.contains("ежедневно")
@@ -20,7 +19,6 @@ object CommandProcessor {
             }
         }
 
-        // 2. Список будильников
         if (cmd.contains("список будильников") || cmd.contains("какие будильники")) {
             val alarms = PrefsManager.getAlarms()
             if (alarms.isEmpty()) {
@@ -35,7 +33,6 @@ object CommandProcessor {
             return true
         }
 
-        // 3. Автоответ
         if (cmd.contains("включи автоответ")) {
             PrefsManager.autoReplyEnabled = true
             context.sendReplyFromCommand("Автоответ включен. Текст: ${PrefsManager.autoReplyText}")
@@ -47,7 +44,6 @@ object CommandProcessor {
             return true
         }
         
-        // 4. Перевод
         if (cmd.contains("переведи с ") && cmd.contains(" на ")) {
             val parts = cmd.split(" на ")
             if (parts.size == 2) {
