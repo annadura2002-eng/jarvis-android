@@ -56,6 +56,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var neuralTTS: NeuralTTS
     private val executor = Executors.newSingleThreadExecutor()
     private val client = OkHttpClient()
+    private val chatHistory = mutableListOf<JSONObject>()
     private val uiHandler = Handler(Looper.getMainLooper())
     
     private var assistantName = "Jarvis"
@@ -151,7 +152,7 @@ class MainActivity : AppCompatActivity() {
             val t = inputField.text.toString().trim()
             if (t.isNotEmpty()) { inputField.text.clear(); handleCommand(t) }
         }
-        voiceButton.setOnClickListener { showBeautifulVoiceInput() }
+        voiceButton.setOnClickListener { voiceButton.startAnimation(AnimationUtils.loadAnimation(this, R.anim.pulse_scale)); showBeautifulVoiceInput() }
         btnMenu.setOnClickListener { showBottomSheetMenu() }
     }
 
@@ -230,6 +231,15 @@ class MainActivity : AppCompatActivity() {
         view.findViewById<LinearLayout>(R.id.btnMenuVoice).setOnClickListener { bottomSheetDialog.dismiss(); showVoiceSettingsDialog() }
         view.findViewById<LinearLayout>(R.id.btnMenuSettings).setOnClickListener { bottomSheetDialog.dismiss(); apiBar.visibility = LinearLayout.VISIBLE }
         view.findViewById<LinearLayout>(R.id.btnMenuBubble).setOnClickListener { bottomSheetDialog.dismiss(); toggleBubble() }
+        view.findViewById<LinearLayout>(R.id.btnMenuTheme)?.setOnClickListener {
+            bottomSheetDialog.dismiss()
+            val currentNightMode = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
+            if (currentNightMode == android.content.res.Configuration.UI_MODE_NIGHT_YES) {
+                androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO)
+            } else {
+                androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES)
+            }
+        }
         view.findViewById<LinearLayout>(R.id.btnMenuLogout).setOnClickListener {
             bottomSheetDialog.dismiss(); FirebaseAuth.getInstance().signOut()
             startActivity(Intent(this, LoginActivity::class.java)); finish()
@@ -852,18 +862,34 @@ class MainActivity : AppCompatActivity() {
         showSkeletonLoader()
         executor.execute {
             try {
+                // Добавляем сообщение пользователя в историю
+                chatHistory.add(JSONObject().apply { put("role", "user"); put("content", prompt) })
+                
+                // Ограничиваем историю последними 10 сообщениями (5 пар)
+                while (chatHistory.size > 10) { chatHistory.removeAt(0) }
+
+                val messagesArray = JSONArray()
+                // Системный промпт
+                messagesArray.put(JSONObject().apply { 
+                    put("role", "system"); 
+                    put("content", "Ты - голосовой ассистент. Сегодня ${java.text.SimpleDateFormat("d MMMM yyyy", Locale("ru")).format(java.util.Date())}. Отвечай кратко.") 
+                })
+                // Добавляем историю
+                for (msg in chatHistory) messagesArray.put(msg)
+
                 val json = JSONObject().apply {
                     put("model", "gpt-4o-mini")
-                    put("messages", JSONArray().apply { 
-                        put(JSONObject().apply { put("role", "system"); put("content", "Ты - голосовой ассистент. Сегодня ${java.text.SimpleDateFormat("d MMMM yyyy", Locale("ru")).format(java.util.Date())}. Отвечай кратко.") })
-                        put(JSONObject().apply { put("role", "user"); put("content", prompt) })
-                    })
+                    put("messages", messagesArray)
                 }
+                
                 val body = json.toString().toRequestBody("application/json".toMediaType())
                 val request = Request.Builder().url("https://api.proxyapi.ru/openai/v1/chat/completions").addHeader("Authorization", "Bearer $apiKey").post(body).build()
                 client.newCall(request).execute().use { response ->
                     if (response.isSuccessful) {
                         val answer = JSONObject(response.body!!.string()).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
+                        // Добавляем ответ ассистента в историю
+                        chatHistory.add(JSONObject().apply { put("role", "assistant"); put("content", answer) })
+                        
                         runOnUiThread { hideSkeletonLoader(); animateBotReply(answer) }
                     } else runOnUiThread { hideSkeletonLoader(); reply("Ошибка ИИ: ${response.code}") }
                 }
@@ -982,6 +1008,78 @@ class MainActivity : AppCompatActivity() {
     
     fun sendReplyFromCommand(text: String) {
         reply(text)
+    }
+
+}
+
+    // --- РЕЖИМ ПЕРЕВОДЧИКА ---
+    fun startTranslationMode(fromLang: String, toLang: String) {
+        reply("Режим перевода ($fromLang -> $toLang) включен. Говорите, я буду переводить. Скажите 'стоп' чтобы выйти.")
+        
+        // Настраиваем распознаватель на непрерывную работу
+        val sr = SpeechRecognizer.createSpeechRecognizer(this)
+        sr.setRecognitionListener(object : RecognitionListener {
+            override fun onResults(results: Bundle?) {
+                val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
+                if (text.lowercase().contains("стоп") || text.lowercase().contains("stop")) {
+                    sr.destroy()
+                    reply("Режим перевода выключен.")
+                    return
+                }
+                if (text.isNotEmpty()) {
+                    translateText(text, fromLang, toLang) { translated ->
+                        runOnUiThread {
+                            addBubble("Оригинал: $text", true)
+                            animateBotReply(translated)
+                        }
+                    }
+                }
+                // Перезапускаем слушку
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                }
+                sr.startListening(intent)
+            }
+            override fun onError(error: Int) {
+                // В случае ошибки перезапускаем
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                sr.startListening(intent)
+            }
+            override fun onReadyForSpeech(params: Bundle?) {}
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {}
+            override fun onPartialResults(partialResults: Bundle?) {}
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+        })
+        
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        }
+        sr.startListening(intent)
+    }
+
+    private fun translateText(text: String, from: String, to: String, callback: (String) -> Unit) {
+        executor.execute {
+            try {
+                val json = JSONObject().apply {
+                    put("model", "gpt-4o-mini")
+                    put("messages", JSONArray().apply {
+                        put(JSONObject().apply { put("role", "system"); put("content", "Ты переводчик. Переведи текст с языка $from на язык $to. Отвечай ТОЛЬКО переводом, без лишних слов.") })
+                        put(JSONObject().apply { put("role", "user"); put("content", text) })
+                    })
+                }
+                val body = json.toString().toRequestBody("application/json".toMediaType())
+                val request = Request.Builder().url("https://api.proxyapi.ru/openai/v1/chat/completions").addHeader("Authorization", "Bearer $apiKey").post(body).build()
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val answer = JSONObject(response.body!!.string()).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")
+                        callback(answer)
+                    } else callback("Ошибка перевода")
+                }
+            } catch (e: Exception) { callback("Ошибка сети") }
+        }
     }
 
 }

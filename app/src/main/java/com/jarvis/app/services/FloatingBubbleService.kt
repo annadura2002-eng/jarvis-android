@@ -9,8 +9,12 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.view.*
 import android.view.inputmethod.InputMethodManager
+import android.view.animation.AnimationUtils
 import android.widget.*
 import com.jarvis.app.R
 import kotlin.math.abs
@@ -23,6 +27,7 @@ class FloatingBubbleService : Service() {
     private var tvAnswer: TextView? = null
     private var isChatOpen = false
     private var lastAnswer = ""
+    private var speechRecognizer: SpeechRecognizer? = null
 
     private val answerReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -68,27 +73,32 @@ class FloatingBubbleService : Service() {
         bubble.setOnTouchListener(object : View.OnTouchListener {
             private var initialX = 0; private var initialY = 0
             private var initialTouchX = 0f; private var initialTouchY = 0f
+            private var isDragging = false
 
             override fun onTouch(v: View?, event: MotionEvent?): Boolean {
                 when (event?.action) {
                     MotionEvent.ACTION_DOWN -> {
                         initialX = params.x; initialY = params.y
                         initialTouchX = event.rawX; initialTouchY = event.rawY
+                        isDragging = false
                         return true
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        params.x = initialX + (event.rawX - initialTouchX).toInt()
-                        params.y = initialY + (event.rawY - initialTouchY).toInt()
-                        windowManager.updateViewLayout(floatingView, params)
+                        if (abs(event.rawX - initialTouchX) > 10 || abs(event.rawY - initialTouchY) > 10) {
+                            isDragging = true
+                            params.x = initialX + (event.rawX - initialTouchX).toInt()
+                            params.y = initialY + (event.rawY - initialTouchY).toInt()
+                            windowManager.updateViewLayout(floatingView, params)
+                        }
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
-                        if (abs(event.rawX - initialTouchX) < 10 && abs(event.rawY - initialTouchY) < 10) {
+                        if (!isDragging) {
                             if (isChatOpen) closeChat() else showMiniChat()
                         } else {
                             // Snap to edge
                             val screenWidth = resources.displayMetrics.widthPixels
-                            val bubbleWidth = 150 // примерная ширина в px
+                            val bubbleWidth = 150
                             params.x = if (event.rawX > screenWidth / 2) screenWidth - bubbleWidth else 0
                             windowManager.updateViewLayout(floatingView, params)
                         }
@@ -111,6 +121,22 @@ class FloatingBubbleService : Service() {
         tvAnswer = chatLayout.findViewById(R.id.tvBubbleAnswer)
         val etInput = chatLayout.findViewById<EditText>(R.id.etBubbleInput)
         val btnSend = chatLayout.findViewById<Button>(R.id.btnBubbleSend)
+        
+        // Добавляем кнопку микрофона прямо в чат (если её нет в layout, создадим программно)
+        val btnMic = chatLayout.findViewWithTag<ImageButton>("btnMic") ?: ImageButton(this).apply {
+            tag = "btnMic"
+            setImageResource(android.R.drawable.ic_btn_speak_now)
+            setBackgroundColor(Color.TRANSPARENT)
+            setColorFilter(Color.parseColor("#2DD4BF"))
+            val lp = LinearLayout.LayoutParams(100, 100)
+            layoutParams = lp
+        }
+        
+        // Если кнопка микрофона новая, добавляем её в layout рядом с полем ввода
+        if (btnMic.parent == null) {
+            val parent = etInput?.parent as? LinearLayout
+            if (parent != null) parent.addView(btnMic)
+        }
 
         if (!lastAnswer.isEmpty()) {
             tvAnswer?.text = lastAnswer
@@ -130,6 +156,10 @@ class FloatingBubbleService : Service() {
                 sendBroadcast(intent)
             }
         }
+        
+        btnMic.setOnClickListener {
+            startVoiceInputForBubble(etInput, tvAnswer)
+        }
 
         val paramsChat = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -145,7 +175,6 @@ class FloatingBubbleService : Service() {
         chatView = chatLayout
         windowManager.addView(chatView, paramsChat)
 
-        // Фикс клавиатуры (сдвигаем чат вверх при появлении)
         chatLayout.viewTreeObserver.addOnGlobalLayoutListener {
             val rect = android.graphics.Rect()
             chatLayout.getWindowVisibleDisplayFrame(rect)
@@ -164,11 +193,51 @@ class FloatingBubbleService : Service() {
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         imm.showSoftInput(etInput, InputMethodManager.SHOW_IMPLICIT)
     }
+    
+    private fun startVoiceInputForBubble(etInput: EditText?, tvAnswer: TextView?) {
+        if (speechRecognizer == null) {
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+        }
+        speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+            override fun onResults(results: Bundle?) {
+                val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
+                if (text.isNotEmpty()) {
+                    etInput?.setText(text)
+                    tvAnswer?.visibility = View.VISIBLE
+                    tvAnswer?.text = "Думаю..."
+                    val intent = Intent("MINI_CHAT_COMMAND")
+                    intent.putExtra("command", text)
+                    sendBroadcast(intent)
+                }
+            }
+            override fun onError(error: Int) {
+                tvAnswer?.visibility = View.VISIBLE
+                tvAnswer?.text = "Не расслышал, попробуй еще."
+            }
+            override fun onReadyForSpeech(params: Bundle?) {}
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {}
+            override fun onPartialResults(partialResults: Bundle?) {}
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+        })
+        
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+        }
+        speechRecognizer?.startListening(intent)
+        tvAnswer?.visibility = View.VISIBLE
+        tvAnswer?.text = "Слушаю..."
+    }
 
     private fun closeChat() {
         chatView?.let { windowManager.removeView(it) }
         chatView = null
         isChatOpen = false
+        speechRecognizer?.destroy()
+        speechRecognizer = null
     }
 
     override fun onDestroy() {

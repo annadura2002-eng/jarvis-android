@@ -17,7 +17,21 @@
 
     <LinearLayout android:id="@+id/btnMenuCommands" android:layout_width="match_parent" android:layout_height="60dp" android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/bg_glass" android:padding="16dp" android:layout_marginBottom="12dp">
         <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="📋 Список команд" android:textColor="#FFFFFF" android:textSize="16sp"/>
+        <LinearLayout
+        android:id="@+id/btnMenuTheme"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="16dp"
+        android:gravity="center_vertical">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🌗 Сменить тему"
+            android:textColor="#F8FAFC"
+            android:textSize="16sp" />
     </LinearLayout>
+</LinearLayout>
 
     <LinearLayout android:id="@+id/btnMenuSecrets" android:layout_width="match_parent" android:layout_height="60dp" android:orientation="horizontal" android:gravity="center_vertical" android:background="@drawable/bg_glass" android:padding="16dp" android:layout_marginBottom="12dp">
         <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="🔒 Секретные команды" android:textColor="#FFFFFF" android:textSize="16sp"/>

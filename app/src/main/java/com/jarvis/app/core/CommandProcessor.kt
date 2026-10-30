@@ -49,6 +49,17 @@ object CommandProcessor {
             return true
         }
         
+
+        // 4. Переводчик-синхронист
+        if (cmd.contains("переведи с ") && cmd.contains(" на ")) {
+            val parts = cmd.split(" на ")
+            if (parts.size == 2) {
+                val fromLangRaw = parts[0].replace("переведи с ", "").trim()
+                val toLangRaw = parts[1].trim()
+                context.startTranslationMode(fromLangRaw, toLangRaw)
+                return true
+            }
+        }
         return false
     }
 }
