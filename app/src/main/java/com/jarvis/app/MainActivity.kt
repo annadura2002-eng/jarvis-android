@@ -177,6 +177,9 @@ class MainActivity : AppCompatActivity() {
             } else {
                 alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pendingIntent)
             }
+            saveAlarmToPrefs(hour, minute)
+            saveAlarmToPrefs(hour, minute)
+            saveAlarmToPrefs(hour, minute)
             reply("Будильник установлен на ${"%02d".format(hour)}:${"%02d".format(minute)}")
         } catch (e: Exception) {
             reply("Ошибка установки будильника: ${e.message}")
@@ -487,6 +490,31 @@ class MainActivity : AppCompatActivity() {
         }
 
         // --- БУДИЛЬНИК ---
+        // СПИСОК БУДИЛЬНИКОВ
+        if (cmd.contains("список будильников") || cmd.contains("какие будильники")) {
+            val alarms = getAlarmsFromPrefs()
+            if (alarms.isEmpty()) reply("У вас нет установленных будильников.")
+            else reply("Ваши будильники: " + alarms.joinToString(", "))
+            return
+        }
+
+        // ВЫКЛЮЧИ БУДИЛЬНИК
+        if (cmd.contains("выключи будильник") || cmd.contains("убери будильник")) {
+            val regex = Regex("(\\d{1,2})[:. ](\\d{2})")
+            val match = regex.find(cmd)
+            if (match != null) {
+                val h = match.groupValues[1].toIntOrNull() ?: 7
+                val m = match.groupValues[2].toIntOrNull() ?: 0
+                val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                val intent = Intent(this, AlarmService::class.java)
+                val pendingIntent = PendingIntent.getService(this, 100, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                alarmManager.cancel(pendingIntent)
+                removeAlarmFromPrefs(h, m)
+                reply("Будильник на $h:$m выключен.")
+            } else reply("Скажите: выключи будильник на 7:30")
+            return
+        }
+
         if (cmd.contains("будильник") || cmd.contains("alarm")) {
             val regex = Regex("(\\d{1,2})[:. ](\\d{2})")
             val match = regex.find(cmd)
@@ -873,5 +901,27 @@ class MainActivity : AppCompatActivity() {
         if (notGranted.isNotEmpty()) requestPerms.launch(notGranted.toTypedArray())
     }
 
+    private fun saveAlarmToPrefs(hour: Int, minute: Int) {
+        val prefs = getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE)
+        val current = prefs.getString("alarms", "") ?: ""
+        val newAlarm = "$hour:$minute"
+        if (!current.contains(newAlarm)) {
+            prefs.edit().putString("alarms", if (current.isEmpty()) newAlarm else "$current,$newAlarm").apply()
+        }
+    }
+
+    private fun getAlarmsFromPrefs(): List<String> {
+        val prefs = getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE)
+        val saved = prefs.getString("alarms", "") ?: ""
+        if (saved.isEmpty()) return emptyList()
+        return saved.split(",")
+    }
+
+    private fun removeAlarmFromPrefs(hour: Int, minute: Int) {
+        val prefs = getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE)
+        val current = getAlarmsFromPrefs().toMutableList()
+        current.remove("$hour:$minute")
+        prefs.edit().putString("alarms", current.joinToString(",")).apply()
+    }
     override fun onDestroy() { try { unregisterReceiver(wakeWordReceiver); unregisterReceiver(miniChatReceiver) } catch (e: Exception) {}; super.onDestroy() }
 }

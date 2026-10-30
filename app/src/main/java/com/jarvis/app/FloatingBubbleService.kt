@@ -96,7 +96,6 @@ class FloatingBubbleService : Service() {
         if (isChatOpen) return
         isChatOpen = true
 
-        // Используем LayoutInflater.from(this), так как в сервисе нет свойства layoutInflater
         val chatLayout = LayoutInflater.from(this).inflate(R.layout.dialog_bubble_chat, null)
         tvAnswer = chatLayout.findViewById(R.id.tvBubbleAnswer)
         val etInput = chatLayout.findViewById<EditText>(R.id.etBubbleInput)
@@ -109,12 +108,13 @@ class FloatingBubbleService : Service() {
                 tvAnswer?.visibility = View.VISIBLE
                 tvAnswer?.text = "Думаю..."
                 val intent = Intent("MINI_CHAT_COMMAND")
-                // Явно указываем, что передаем String
                 intent.putExtra("command", question as String)
                 sendBroadcast(intent)
             }
         }
 
+        // ВАЖНЫЕ ФЛАГИ: FLAG_NOT_TOUCH_MODAL (чтобы фон был кликабельным) 
+        // и FLAG_ALT_FOCUSABLE_IM (чтобы ввод работал)
         val paramsChat = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -124,6 +124,7 @@ class FloatingBubbleService : Service() {
         )
         paramsChat.gravity = Gravity.BOTTOM
         paramsChat.y = 150
+        paramsChat.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE or WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         
         chatView = chatLayout
         windowManager.addView(chatView, paramsChat)
