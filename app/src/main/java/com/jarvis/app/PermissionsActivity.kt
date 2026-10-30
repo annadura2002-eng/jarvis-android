@@ -30,7 +30,7 @@ class PermissionsActivity : AppCompatActivity() {
 
         btnMic = findViewById(R.id.btnMic)
         btnContacts = findViewById(R.id.btnContacts)
-        btnPhoneSms = findViewById(R.id.btnPhoneSms)
+        btnPhoneSms = null
         btnNotifs = findViewById(R.id.btnNotifs)
         btnAccess = findViewById(R.id.btnAccess)
         btnContinue = findViewById(R.id.btnContinue)
@@ -71,7 +71,7 @@ class PermissionsActivity : AppCompatActivity() {
 
         if (hasMic) btnMic.text = "Выдано ✓" else btnMic.text = "Выдать"
         if (hasContacts) btnContacts.text = "Выдано ✓" else btnContacts.text = "Выдать"
-        if (hasPhone && hasSms) btnPhoneSms.text = "Выдано ✓" else btnPhoneSms.text = "Выдать"
+        
         if (hasNotifs) btnNotifs.text = "Выдано ✓" else btnNotifs.text = "Выдать"
         if (hasAccess) btnAccess.text = "Выдано ✓" else btnAccess.text = "Выдать"
 
