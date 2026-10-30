@@ -32,6 +32,11 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.firebase.auth.FirebaseAuth
+import com.jarvis.app.core.PrefsManager
+import com.jarvis.app.services.NeuralTTS
+import com.jarvis.app.core.ChatManager
+import com.jarvis.app.core.TranslationManager
+import com.jarvis.app.core.CommandProcessor
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -1037,7 +1042,7 @@ class MainActivity : AppCompatActivity() {
                     } else callback("Ошибка перевода")
                 }
             } catch (e: Exception) { callback("Ошибка сети") }
-        }
+        
     
     fun createAlarmFromCommand(hour: Int, minute: Int, daily: Boolean) {
         setJarvisAlarm(hour, minute)
