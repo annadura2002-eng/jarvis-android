@@ -43,6 +43,7 @@ class PermissionsActivity : AppCompatActivity() {
             startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
         }
         btnAccess.setOnClickListener {
+            // Открываем настройки доступности, чтобы пользователь включил службу
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
         btnContinue.setOnClickListener {
@@ -67,8 +68,8 @@ class PermissionsActivity : AppCompatActivity() {
         if (hasNotifs) btnNotifs.text = "Выдано ✓" else btnNotifs.text = "Выдать"
         if (hasAccess) btnAccess.text = "Выдано ✓" else btnAccess.text = "Выдать"
 
-        // Достаточно микрофона, контактов и уведомлений для продолжения
-        if (hasMic && hasContacts && hasNotifs) {
+        // БЛОКИРОВКА: пока не выданы ВСЕ 4 разрешения, кнопка неактивна
+        if (hasMic && hasContacts && hasNotifs && hasAccess) {
             btnContinue.isEnabled = true
             btnContinue.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#5B5BFF"))
         } else {
@@ -84,8 +85,9 @@ class PermissionsActivity : AppCompatActivity() {
 
     private fun isAccessibilityServiceEnabled(): Boolean {
         // Проверяем, есть ли наш пакет + имя класса в глобальных настройках доступности
+        // Используем contains, потому что имя класса может отличаться по регистру
         val service = "$packageName/${JarvisAccessibilityService::class.java.canonicalName}"
         val enabled = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
-        return enabled != null && enabled.contains(service)
+        return enabled != null && enabled.contains(service, ignoreCase = true)
     }
 }
