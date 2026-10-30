@@ -18,9 +18,15 @@ class NeuralTTS(private val context: Context, private val apiKey: String) {
         .build()
         
     private var mediaPlayer: MediaPlayer? = null
+    var volume: Float = 1.0f // Громкость от 0.0 до 1.0
 
     fun speak(text: String, voice: String = "nova", onStart: () -> Unit = {}) {
         stop()
+        if (volume <= 0.01f) { // Если громкость на нуле — просто печатаем текст
+            onStart()
+            return
+        }
+
         Thread {
             try {
                 val json = JSONObject().apply {
@@ -46,11 +52,10 @@ class NeuralTTS(private val context: Context, private val apiKey: String) {
                                 mediaPlayer = MediaPlayer()
                                 mediaPlayer?.setDataSource(tempFile.absolutePath)
                                 mediaPlayer?.prepare()
+                                mediaPlayer?.setVolume(volume, volume) // Устанавливаем громкость
                                 mediaPlayer?.start()
                                 onStart()
                             }
-                        } else {
-                            android.os.Handler(context.mainLooper).post { onStart() }
                         }
                     } else {
                         android.os.Handler(context.mainLooper).post { onStart() }

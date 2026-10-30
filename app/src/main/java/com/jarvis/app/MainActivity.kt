@@ -38,6 +38,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
 import java.net.URL
 import java.util.Calendar
 import java.util.Locale
@@ -88,6 +89,7 @@ class MainActivity : AppCompatActivity() {
     private val requestPerms = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        com.jarvis.app.core.PrefsManager.init(this)
         super.onCreate(savedInstanceState)
         setTheme(R.style.Theme_Jarvis)
         setContentView(R.layout.activity_main)
@@ -153,7 +155,7 @@ class MainActivity : AppCompatActivity() {
         btnMenu.setOnClickListener { showBottomSheetMenu() }
     }
 
-    private fun setJarvisAlarm(hour: Int, minute: Int) {
+    fun setJarvisAlarmPublic(hour: Int, minute: Int) {
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(this, AlarmService::class.java)
         val pendingIntent = PendingIntent.getService(this, 100, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -418,6 +420,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleCommand(raw: String) {
+        if (com.jarvis.app.core.CommandProcessor.process(this, raw)) return
         var cmd = raw.lowercase(Locale.ROOT).trim()
         
         if (cmd == "стоп" || cmd == "stop" || cmd == "замолчи") {
@@ -461,6 +464,18 @@ class MainActivity : AppCompatActivity() {
         }
 
         // --- ГРОМКОСТЬ ---
+        // ЯРКОСТЬ
+        if (cmd.contains("яркость")) {
+            val num = cmd.filter { it.isDigit() }.toIntOrNull()
+            if (num != null) {
+                val params = window.attributes
+                params.screenBrightness = num / 100f
+                window.attributes = params
+                reply("Яркость изменена на $num процентов.")
+            } else reply("Скажите: яркость 50")
+            return
+        }
+
         if (cmd.contains("громкость")) {
             val num = cmd.filter { it.isDigit() }.toIntOrNull()
             if (num != null) {
@@ -689,6 +704,36 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        // СКРИНШОТ
+        if (cmd.contains("скриншот")) {
+            reply("Делаю скриншот...")
+            executor.execute {
+                try {
+                    val view = window.decorView.rootView
+                    val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
+                    val canvas = android.graphics.Canvas(bitmap)
+                    view.draw(canvas)
+                    val file = File(getExternalFilesDir(null), "screenshot_${System.currentTimeMillis()}.png")
+                    val fos = FileOutputStream(file)
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, fos)
+                    fos.flush(); fos.close()
+                    runOnUiThread { reply("Скриншот сохранен в папку приложения.") }
+                } catch (e: Exception) { runOnUiThread { reply("Ошибка скриншота") } }
+            }
+            return
+        }
+
+        // БУФЕР ОБМЕНА (ВСТАВИТЬ)
+        if (cmd.contains("вставь текст")) {
+            val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val text = clipboard.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
+            if (text.isNotEmpty()) {
+                access?.inputText(text)
+                reply("Вставил текст из буфера.")
+            } else reply("Буфер обмена пуст.")
+            return
+        }
+
         if (cmd.contains("батаре")) {
             val bm = getSystemService(BATTERY_SERVICE) as android.os.BatteryManager
             reply("Заряд: ${bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)}%"); return
@@ -858,7 +903,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun logUser(text: String) { runOnUiThread { addBubble(text, true) } }
-    private fun reply(text: String) { 
+    fun replyPublic(text: String) { 
         runOnUiThread { addBubble(text, false) }
         neuralTTS.speak(text, selectedVoice)
         // Отправляем ответ в пузырь

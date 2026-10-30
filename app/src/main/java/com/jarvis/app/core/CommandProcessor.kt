@@ -1,0 +1,59 @@
+package com.jarvis.app.core
+
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import com.jarvis.app.MainActivity
+
+object CommandProcessor {
+    
+    fun process(context: MainActivity, raw: String): Boolean {
+        val cmd = raw.lowercase().trim()
+        
+        // 1. Будильники (новые полезные команды)
+        if (cmd.startsWith("будильник на") || cmd.startsWith("поставь будильник на")) {
+            val timePart = cmd.replace("поставь ", "").replace("будильник на ", "").trim()
+            val isDaily = cmd.contains("каждый день") || cmd.contains("ежедневно")
+            
+            val regex = Regex("(\\d{1,2})[:. ](\\d{2})")
+            val match = regex.find(timePart)
+            
+            if (match != null) {
+                val h = match.groupValues[1].toIntOrNull() ?: 7
+                val m = match.groupValues[2].toIntOrNull() ?: 0
+                context.setJarvisAlarmPublic(h, m, isDaily)
+                return true
+            }
+        }
+
+        // 2. Список будильников
+        if (cmd.contains("список будильников") || cmd.contains("какие будильники")) {
+            val alarms = PrefsManager.getAlarms()
+            if (alarms.isEmpty()) {
+                context.replyPublic("У вас нет установленных будильников.")
+            } else {
+                val text = alarms.joinToString("\n") { 
+                    val time = String.format("%02d:%02d", it.hour, it.minute)
+                    if (it.daily) "🕒 $time (каждый день)" else "🕒 $time (один раз)"
+                }
+                context.replyPublic("Ваши будильники:\n$text")
+            }
+            return true
+        }
+
+        // 3. Автоответ настройки
+        if (cmd.contains("включи автоответ")) {
+            PrefsManager.autoReplyEnabled = true
+            context.replyPublic("Автоответ включен. Текст: ${PrefsManager.autoReplyText}")
+            return true
+        }
+        if (cmd.contains("выключи автоответ")) {
+            PrefsManager.autoReplyEnabled = false
+            context.replyPublic("Автоответ выключен.")
+            return true
+        }
+        
+        return false
+    }
+}
