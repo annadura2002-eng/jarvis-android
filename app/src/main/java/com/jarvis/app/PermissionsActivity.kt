@@ -14,7 +14,6 @@ class PermissionsActivity : AppCompatActivity() {
 
     private lateinit var btnMic: Button
     private lateinit var btnContacts: Button
-    private lateinit var btnPhoneSms: Button
     private lateinit var btnNotifs: Button
     private lateinit var btnAccess: Button
     private lateinit var btnContinue: Button
@@ -30,7 +29,6 @@ class PermissionsActivity : AppCompatActivity() {
 
         btnMic = findViewById(R.id.btnMic)
         btnContacts = findViewById(R.id.btnContacts)
-        btnPhoneSms = null
         btnNotifs = findViewById(R.id.btnNotifs)
         btnAccess = findViewById(R.id.btnAccess)
         btnContinue = findViewById(R.id.btnContinue)
@@ -40,9 +38,6 @@ class PermissionsActivity : AppCompatActivity() {
         }
         btnContacts.setOnClickListener {
             requestPerms.launch(arrayOf(Manifest.permission.READ_CONTACTS))
-        }
-        btnPhoneSms.setOnClickListener {
-            requestPerms.launch(arrayOf(Manifest.permission.CALL_PHONE, Manifest.permission.SEND_SMS, Manifest.permission.READ_PHONE_STATE))
         }
         btnNotifs.setOnClickListener {
             startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
@@ -64,18 +59,16 @@ class PermissionsActivity : AppCompatActivity() {
     private fun checkStatus() {
         val hasMic = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         val hasContacts = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
-        val hasPhone = ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED
-        val hasSms = ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
         val hasNotifs = isNotificationServiceEnabled()
         val hasAccess = isAccessibilityServiceEnabled()
 
         if (hasMic) btnMic.text = "Выдано ✓" else btnMic.text = "Выдать"
         if (hasContacts) btnContacts.text = "Выдано ✓" else btnContacts.text = "Выдать"
-        
         if (hasNotifs) btnNotifs.text = "Выдано ✓" else btnNotifs.text = "Выдать"
         if (hasAccess) btnAccess.text = "Выдано ✓" else btnAccess.text = "Выдать"
 
-        if (hasMic && hasContacts && hasPhone && hasSms && hasNotifs) {
+        // Разрешаем продолжить, если выданы микрофон, контакты и уведомления
+        if (hasMic && hasContacts && hasNotifs) {
             btnContinue.isEnabled = true
             btnContinue.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#5B5BFF"))
         } else {
