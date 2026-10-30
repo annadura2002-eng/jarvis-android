@@ -61,7 +61,6 @@
 
         <service android:name=".services.GeoService" android:exported="false"/>
         
-        <service android:name=".NotificationService"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
             android:exported="true">
             <intent-filter>
@@ -69,7 +68,6 @@
             </intent-filter>
         </service>
 
-        <service android:name=".services.SmartNotificationService"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
             android:exported="true">
             <intent-filter>
@@ -77,19 +75,32 @@
             </intent-filter>
         </service>
 
-        <service android:name=".services.JarvisAccessibilityService"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility_service_config" />
-        </service>
         <service android:name=".services.AlarmService" android:exported="false"/>
         <receiver android:name=".BootReceiver" android:enabled="true" android:exported="true">
         <intent-filter>
             <action android:name="android.intent.action.BOOT_COMPLETED"/>
         </intent-filter>
     </receiver>
-    </application>
+    
+        <service
+            android:name="com.jarvis.app.services.JarvisAccessibilityService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <service
+            android:name="com.jarvis.app.services.SmartNotificationService"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+</application>
 </manifest>
