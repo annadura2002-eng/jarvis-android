@@ -83,11 +83,13 @@ class PermissionsActivity : AppCompatActivity() {
         return flat != null && flat.contains(packageName)
     }
 
-    private fun isAccessibilityServiceEnabled(): Boolean {
-        // Проверяем, есть ли наш пакет + имя класса в глобальных настройках доступности
-        // Используем contains, потому что имя класса может отличаться по регистру
-        val service = "$packageName/${JarvisAccessibilityService::class.java.canonicalName}"
-        val enabled = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
-        return enabled != null && enabled.contains(service, ignoreCase = true)
+        private fun isAccessibilityServiceEnabled(): Boolean {
+        // Проверяем, есть ли наш пакет в списке включённых служб доступности.
+        // Это надёжнее, чем искать полное имя класса, т.к. система может его форматировать по-разному.
+        val enabledServices = Settings.Secure.getString(
+            contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        return enabledServices.contains(packageName)
     }
 }
