@@ -47,6 +47,7 @@ class FloatingBubbleService : Service() {
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(answerReceiver, IntentFilter("BUBBLE_ANSWER"), Context.RECEIVER_NOT_EXPORTED)
         } else {
@@ -109,10 +110,23 @@ class FloatingBubbleService : Service() {
     private fun showMiniChat() {
         if (isChatOpen) return
         isChatOpen = true
+        
         val chatLayout = LayoutInflater.from(this).inflate(R.layout.dialog_bubble_chat, null)
         tvAnswer = chatLayout.findViewById(R.id.tvBubbleAnswer)
         val etInput = chatLayout.findViewById<EditText>(R.id.etBubbleInput)
         val btnSend = chatLayout.findViewById<Button>(R.id.btnBubbleSend)
+        
+        val btnMic = ImageButton(this).apply {
+            setImageResource(android.R.drawable.ic_btn_speak_now)
+            setBackgroundColor(Color.TRANSPARENT)
+            setColorFilter(Color.parseColor("#2DD4BF"))
+            layoutParams = LinearLayout.LayoutParams(100, 100)
+        }
+        val parent = etInput?.parent as? LinearLayout
+        if (parent != null && parent.findViewWithTag<ImageButton>("btnMic") == null) {
+            btnMic.tag = "btnMic"
+            parent.addView(btnMic)
+        }
 
         if (lastAnswer.isNotEmpty()) {
             tvAnswer?.text = lastAnswer; tvAnswer?.visibility = View.VISIBLE
@@ -125,6 +139,10 @@ class FloatingBubbleService : Service() {
                 tvAnswer?.visibility = View.VISIBLE; tvAnswer?.text = "Думаю..."
                 sendBroadcast(Intent("MINI_CHAT_COMMAND").putExtra("command", question))
             }
+        }
+        
+        btnMic.setOnClickListener {
+            startVoiceInputForBubble(etInput, tvAnswer)
         }
 
         val paramsChat = WindowManager.LayoutParams(
@@ -148,6 +166,41 @@ class FloatingBubbleService : Service() {
         }
         etInput?.requestFocus()
         (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(etInput, InputMethodManager.SHOW_IMPLICIT)
+    }
+    
+    private fun startVoiceInputForBubble(etInput: EditText?, tvAnswer: TextView?) {
+        if (speechRecognizer == null) {
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+        }
+        speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+            override fun onResults(results: Bundle?) {
+                val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
+                if (text.isNotEmpty()) {
+                    etInput?.setText(text)
+                    tvAnswer?.visibility = View.VISIBLE
+                    tvAnswer?.text = "Думаю..."
+                    sendBroadcast(Intent("MINI_CHAT_COMMAND").putExtra("command", text))
+                }
+            }
+            override fun onError(error: Int) {
+                tvAnswer?.visibility = View.VISIBLE
+                tvAnswer?.text = "Не расслышал, попробуй еще."
+            }
+            override fun onReadyForSpeech(params: Bundle?) {}
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {}
+            override fun onPartialResults(partialResults: Bundle?) {}
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+        })
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+        }
+        speechRecognizer?.startListening(intent)
+        tvAnswer?.visibility = View.VISIBLE
+        tvAnswer?.text = "Слушаю..."
     }
 
     private fun closeChat() {

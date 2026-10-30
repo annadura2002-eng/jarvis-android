@@ -12,9 +12,9 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.app.RemoteInput
 import android.util.Log
+import com.jarvis.app.core.PrefsManager
 
-
-// --- СЕРВИС ГЕОЛОКАЦИИ (Энергоэффективный) ---
+// --- СЕРВИС ГЕОЛОКАЦИИ ---
 class GeoService : Service() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var locationCallback: LocationCallback
@@ -22,10 +22,7 @@ class GeoService : Service() {
     override fun onCreate() {
         super.onCreate()
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
-        
-        // Балансный режим (жрёт меньше батареи)
-        val request = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 300000).build() // Раз в 5 минут
-        
+        val request = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 300000).build()
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
                 val loc = locationResult.lastLocation ?: return
@@ -39,10 +36,8 @@ class GeoService : Service() {
         val prefs = getSharedPreferences("JarvisPrefs", Context.MODE_PRIVATE)
         val homeLat = prefs.getString("home_lat", "")?.toDoubleOrNull() ?: return
         val homeLon = prefs.getString("home_lon", "")?.toDoubleOrNull() ?: return
-
         val results = FloatArray(1)
         Location.distanceBetween(loc.latitude, loc.longitude, homeLat, homeLon, results)
-        
         if (results[0] < 200f) {
             val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
             if (!wifiManager.isWifiEnabled && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
@@ -56,30 +51,27 @@ class GeoService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 }
 
-// --- СЕРВИС АВТО-ОТВЕТЧИКА (Реальный ответ через уведомления) ---
+// --- СЕРВИС АВТО-ОТВЕТЧИКА ---
 class SmartNotificationService : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        com.jarvis.app.core.PrefsManager.init(this)
-        if (!com.jarvis.app.core.PrefsManager.autoReplyEnabled) return
+        PrefsManager.init(this)
+        if (!PrefsManager.autoReplyEnabled) return
 
         val pkg = sbn.packageName
-        // Поддерживаемые приложения
         if (pkg != "org.telegram.messenger" && pkg != "com.whatsapp") return
 
         val extras = sbn.notification.extras
         val title = extras.getString("android.title") ?: "Неизвестный"
         val text = extras.getCharSequence("android.text")?.toString() ?: ""
 
-        // Ищем кнопку "Ответить" (RemoteInput)
         val actions = sbn.notification.actions ?: return
         for (action in actions) {
             if (action.remoteInputs != null) {
-                // Приложение поддерживает быстрый ответ
                 val remoteInput = action.remoteInputs.firstOrNull { it.allowFreeFormInput }
                 if (remoteInput != null) {
                     val intent = Intent()
                     val bundle = android.os.Bundle()
-                    bundle.putCharSequence(remoteInput.resultKey, com.jarvis.app.core.PrefsManager.autoReplyText)
+                    bundle.putCharSequence(remoteInput.resultKey, PrefsManager.autoReplyText)
                     RemoteInput.addResultsToIntent(action.remoteInputs, intent, bundle)
                     try {
                         action.actionIntent.send(this, 0, intent)
