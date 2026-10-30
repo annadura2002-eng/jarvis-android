@@ -10,10 +10,8 @@ object CommandProcessor {
         if (cmd.startsWith("будильник на") || cmd.startsWith("поставь будильник на")) {
             val timePart = cmd.replace("поставь ", "").replace("будильник на ", "").trim()
             val isDaily = cmd.contains("каждый день") || cmd.contains("ежедневно")
-            
             val regex = Regex("(\\d{1,2})[:. ](\\d{2})")
             val match = regex.find(timePart)
-            
             if (match != null) {
                 val h = match.groupValues[1].toIntOrNull() ?: 7
                 val m = match.groupValues[2].toIntOrNull() ?: 0
@@ -37,7 +35,7 @@ object CommandProcessor {
             return true
         }
 
-        // 3. Автоответ настройки
+        // 3. Автоответ
         if (cmd.contains("включи автоответ")) {
             PrefsManager.autoReplyEnabled = true
             context.sendReplyFromCommand("Автоответ включен. Текст: ${PrefsManager.autoReplyText}")
@@ -49,8 +47,7 @@ object CommandProcessor {
             return true
         }
         
-
-        // 4. Переводчик-синхронист
+        // 4. Перевод
         if (cmd.contains("переведи с ") && cmd.contains(" на ")) {
             val parts = cmd.split(" на ")
             if (parts.size == 2) {
@@ -60,6 +57,7 @@ object CommandProcessor {
                 return true
             }
         }
+        
         return false
     }
 }
