@@ -67,7 +67,7 @@ class PermissionsActivity : AppCompatActivity() {
         if (hasNotifs) btnNotifs.text = "Выдано ✓" else btnNotifs.text = "Выдать"
         if (hasAccess) btnAccess.text = "Выдано ✓" else btnAccess.text = "Выдать"
 
-        // Разрешаем продолжить, если выданы микрофон, контакты и уведомления
+        // Достаточно микрофона, контактов и уведомлений для продолжения
         if (hasMic && hasContacts && hasNotifs) {
             btnContinue.isEnabled = true
             btnContinue.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#5B5BFF"))
@@ -83,6 +83,7 @@ class PermissionsActivity : AppCompatActivity() {
     }
 
     private fun isAccessibilityServiceEnabled(): Boolean {
+        // Проверяем, есть ли наш пакет + имя класса в глобальных настройках доступности
         val service = "$packageName/${JarvisAccessibilityService::class.java.canonicalName}"
         val enabled = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
         return enabled != null && enabled.contains(service)
