@@ -53,14 +53,14 @@ object TranslationManager {
         executor.execute {
             try {
                 val json = JSONObject().apply {
-                    put("model", "gpt-4o-mini")
+                    put("model", "deepseek-chat")
                     put("messages", JSONArray().apply {
                         put(JSONObject().apply { put("role", "system"); put("content", "Ты переводчик. Переведи текст с $from на $to. Отвечай ТОЛЬКО переводом.") })
                         put(JSONObject().apply { put("role", "user"); put("content", text) })
                     })
                 }
                 val body = json.toString().toRequestBody("application/json".toMediaType())
-                val req = Request.Builder().url("https://api.proxyapi.ru/openai/v1/chat/completions").addHeader("Authorization", "Bearer $apiKey").post(body).build()
+                val req = Request.Builder().url("https://api.proxyapi.ru/deepseek/chat/completions").addHeader("Authorization", "Bearer $apiKey").post(body).build()
                 client.newCall(req).execute().use { res ->
                     if (res.isSuccessful) {
                         val ans = JSONObject(res.body!!.string()).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content")

@@ -31,12 +31,12 @@ object ChatManager {
                 for (msg in chatHistory) messagesArray.put(msg)
 
                 val json = JSONObject().apply {
-                    put("model", "gpt-4o-mini")
+                    put("model", "deepseek-chat")
                     put("messages", messagesArray)
                 }
                 
                 val body = json.toString().toRequestBody("application/json".toMediaType())
-                val request = Request.Builder().url("https://api.proxyapi.ru/openai/v1/chat/completions")
+                val request = Request.Builder().url("https://api.proxyapi.ru/deepseek/chat/completions")
                     .addHeader("Authorization", "Bearer ${PrefsManager.apiKey}").post(body).build()
                 
                 client.newCall(request).execute().use { response ->

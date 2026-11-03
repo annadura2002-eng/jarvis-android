@@ -773,7 +773,7 @@ class MainActivity : AppCompatActivity() {
     private fun askAiForButton(prompt: String): String? {
         try {
             val json = JSONObject().apply {
-                put("model", "gpt-4o-mini")
+                put("model", "deepseek-chat")
                 put("messages", JSONArray().apply { 
                     put(JSONObject().apply { put("role", "system"); put("content", "Ты - голосовой ассистент. Сегодня ${java.text.SimpleDateFormat("d MMMM yyyy", Locale("ru")).format(java.util.Date())}.") })
                     put(JSONObject().apply { put("role", "user"); put("content", prompt) })
@@ -781,7 +781,7 @@ class MainActivity : AppCompatActivity() {
                 put("max_tokens", 20)
             }
             val body = json.toString().toRequestBody("application/json".toMediaType())
-            val request = Request.Builder().url("https://api.proxyapi.ru/openai/v1/chat/completions").addHeader("Authorization", "Bearer $apiKey").post(body).build()
+            val request = Request.Builder().url("https://api.proxyapi.ru/deepseek/chat/completions").addHeader("Authorization", "Bearer $apiKey").post(body).build()
             client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) return JSONObject(response.body!!.string()).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
             }
